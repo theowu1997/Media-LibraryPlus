@@ -1,0 +1,25 @@
+
+> mla-plus@0.1.0 dev
+> concurrently -k "npm:dev:renderer" "npm:dev:main" "npm:dev:electron"
+
+[dev:renderer] 
+[dev:renderer] > mla-plus@0.1.0 dev:renderer
+[dev:renderer] > vite
+[dev:renderer] 
+[dev:main] 
+[dev:main] > mla-plus@0.1.0 dev:main
+[dev:main] > tsc -p tsconfig.main.json --watch
+[dev:main] 
+[dev:electron] 
+[dev:electron] > mla-plus@0.1.0 dev:electron
+[dev:electron] > wait-on tcp:5173 file:dist/main/main.js && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron .
+[dev:electron] 
+[dev:main] [2J[3J[H12:33:11 pm - Starting compilation in watch mode...
+[dev:main] 
+[dev:renderer] 
+[dev:renderer]   [32m[1mVITE[22m v6.4.1[39m  [2mready in [0m[1m831[22m[2m[0m ms[22m
+[dev:renderer] 
+[dev:renderer]   [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+[dev:main] 
+[dev:main] 12:33:13 pm - Found 0 errors. Watching for file changes.
+[dev:electron] 

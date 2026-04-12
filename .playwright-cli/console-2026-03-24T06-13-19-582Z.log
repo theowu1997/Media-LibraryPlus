@@ -1,0 +1,68 @@
+[     114ms] TypeError: Cannot read properties of undefined (reading 'onScanProgress')
+    at http://127.0.0.1:5173/src/App.tsx:87:43
+    at commitHookEffectListMount (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:16961:34)
+    at commitPassiveMountOnFiber (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18204:19)
+    at commitPassiveMountEffects_complete (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18177:17)
+    at commitPassiveMountEffects_begin (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18167:15)
+    at commitPassiveMountEffects (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18157:11)
+    at flushPassiveEffectsImpl (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19541:11)
+    at flushPassiveEffects (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19498:22)
+    at http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19379:17
+    at workLoop (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:195:42)
+[     117ms] TypeError: Cannot read properties of undefined (reading 'onScanProgress')
+    at http://127.0.0.1:5173/src/App.tsx:87:43
+    at commitHookEffectListMount (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:16961:34)
+    at invokePassiveEffectMountInDEV (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18372:19)
+    at invokeEffectsInDev (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19752:19)
+    at commitDoubleInvokeEffectsInDEV (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19737:15)
+    at flushPassiveEffectsImpl (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19554:13)
+    at flushPassiveEffects (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19498:22)
+    at http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19379:17
+    at workLoop (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:195:42)
+    at flushWork (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:174:22)
+[     118ms] [ERROR] The above error occurred in the <App> component:
+
+    at App (http://127.0.0.1:5173/src/App.tsx:60:35)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:14077
+[     118ms] [ERROR] The above error occurred in the <App> component:
+
+    at App (http://127.0.0.1:5173/src/App.tsx:60:35)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:14077
+[     120ms] TypeError: Cannot read properties of undefined (reading 'onScanProgress')
+    at http://127.0.0.1:5173/src/App.tsx:87:43
+    at commitHookEffectListMount (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:16961:34)
+    at commitPassiveMountOnFiber (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18204:19)
+    at commitPassiveMountEffects_complete (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18177:17)
+    at commitPassiveMountEffects_begin (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18167:15)
+    at commitPassiveMountEffects (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18157:11)
+    at flushPassiveEffectsImpl (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19541:11)
+    at flushPassiveEffects (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19498:22)
+    at http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19379:17
+    at workLoop (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:195:42)
+[     129ms] TypeError: Cannot read properties of undefined (reading 'getAppState')
+    at bootstrap (http://127.0.0.1:5173/src/App.tsx:139:48)
+    at http://127.0.0.1:5173/src/App.tsx:84:10
+    at commitHookEffectListMount (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:16961:34)
+    at commitPassiveMountOnFiber (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18204:19)
+    at commitPassiveMountEffects_complete (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18177:17)
+    at commitPassiveMountEffects_begin (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18167:15)
+    at commitPassiveMountEffects (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18157:11)
+    at flushPassiveEffectsImpl (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19541:11)
+    at flushPassiveEffects (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19498:22)
+    at http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19379:17
+[     130ms] TypeError: Cannot read properties of undefined (reading 'getAppState')
+    at bootstrap (http://127.0.0.1:5173/src/App.tsx:139:48)
+    at http://127.0.0.1:5173/src/App.tsx:84:10
+    at commitHookEffectListMount (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:16961:34)
+    at invokePassiveEffectMountInDEV (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:18372:19)
+    at invokeEffectsInDev (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19752:19)
+    at commitDoubleInvokeEffectsInDEV (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19737:15)
+    at flushPassiveEffectsImpl (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19554:13)
+    at flushPassiveEffects (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19498:22)
+    at http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:19379:17
+    at workLoop (http://127.0.0.1:5173/@fs/C:/Users/TheoSoungWin10/Desktop/MLA+/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=0a963b93:195:42)
+[     128ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/favicon.ico:0
