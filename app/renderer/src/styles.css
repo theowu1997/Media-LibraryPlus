@@ -1075,6 +1075,40 @@ code {
   letter-spacing: 0.02em;
 }
 
+.actress-region-groups {
+  display: grid;
+  gap: 1.2rem;
+  margin-top: 1rem;
+}
+
+.actress-region-section {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.actress-region-section .actress-grid {
+  margin-top: 0;
+}
+
+.actress-region-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 0.1rem;
+}
+
+.actress-region-header h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.actress-region-header span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .actress-grid {
   display: grid;
   grid-template-columns: repeat(var(--actress-cols, 5), 1fr);
@@ -1317,6 +1351,29 @@ code {
   color: var(--muted);
   min-width: 24px;
   text-align: center;
+}
+
+.performer-imported-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.performer-imported-only:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.performer-imported-only input {
+  width: 14px;
+  height: 14px;
 }
 
 .actress-mode-tabs {
@@ -2813,6 +2870,64 @@ kbd {
   box-shadow: 0 18px 38px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(18px);
   z-index: 25;
+}
+
+.fields-popup {
+  min-width: 320px;
+}
+
+.fields-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.25rem 0.4rem 0.15rem;
+}
+
+.fields-popup-title {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.fields-popup-reset {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.25rem 0.4rem;
+  border-radius: 10px;
+}
+
+.fields-popup-reset:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.fields-popup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  padding: 0.3rem;
+}
+
+.fields-popup-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 0.65rem 0.7rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.fields-popup-item:hover {
+  background: rgba(255, 122, 61, 0.14);
+}
+
+.fields-popup-item input {
+  width: 16px;
+  height: 16px;
 }
 
 .scan-mode-popup-item {

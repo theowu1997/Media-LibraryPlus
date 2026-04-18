@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppShellState,
+  BuiltinPerformerProfile,
   DuplicateGroup,
   MetadataSettings,
   LibraryMode,
@@ -130,6 +131,8 @@ const api = {
     ipcRenderer.invoke("subtitle:scan"),
   generateSubtitleForMovie: (movieId: string, options: SubtitleGenerationOptions): Promise<SubtitleGenerationResult> =>
     ipcRenderer.invoke("subtitle:generateForMovie", movieId, options),
+  listBuiltinPerformers: (): Promise<BuiltinPerformerProfile[]> =>
+    ipcRenderer.invoke("performers:listBuiltin"),
 };
 
 contextBridge.exposeInMainWorld("desktopApi", api);

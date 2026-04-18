@@ -24,6 +24,8 @@ interface ActressesPageProps {
   setActressModeFilter: (mode: "all" | LibraryMode) => void;
   actressSortMode: "count" | "studio" | "tag";
   setActressSortMode: (mode: "count" | "studio" | "tag") => void;
+  performerImportedOnly: boolean;
+  setPerformerImportedOnly: (value: boolean) => void;
   isRefreshingActressPhotos: boolean;
   setIsRefreshingActressPhotos: (v: boolean) => void;
   actressPhotos: Record<string, string>;
@@ -47,13 +49,14 @@ interface ActressesPageProps {
 
 const REGION_OPTIONS = [
   "Japan",
-  "Chinese",
-  "America",
+  "China",
+  "United States",
   "Spain",
   "Korea",
   "France",
   "Germany",
   "Italy",
+  "Global",
   "Unknown",
 ];
 
@@ -67,6 +70,8 @@ export function ActressesPage({
   setActressModeFilter,
   actressSortMode,
   setActressSortMode,
+  performerImportedOnly,
+  setPerformerImportedOnly,
   isRefreshingActressPhotos,
   allMoviesPool,
   movies,
@@ -92,6 +97,11 @@ export function ActressesPage({
         activeActressEntry.movieIds.includes(m.id)
       )
     : [];
+
+  function normalizeRegion(value: string): string {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : "Unknown";
+  }
 
   if (selectedActress && activeActressEntry) {
     return (
@@ -127,7 +137,7 @@ export function ActressesPage({
                 )}
               </div>
               <div className="actress-detail-copy">
-                <p className="eyebrow">Actress</p>
+                <p className="eyebrow">Performer</p>
                 <h3 style={{ margin: 0 }}>{activeActressEntry.name}</h3>
                 <span className="actress-count actress-count-strong">
                   {activeActressEntry.count} title{activeActressEntry.count !== 1 ? "s" : ""} in library
@@ -139,12 +149,12 @@ export function ActressesPage({
                   <span>{activeActressEntry.modes.join(" · ")}</span>
                 </div>
                 <label className="form-field actress-region-field">
-                  <span>Region</span>
+                  <span>Country</span>
                   <input
                     className="search-input"
                     list="actress-region-options"
                     onChange={(event) => setSelectedActressRegion(event.target.value)}
-                    placeholder="Japan, Chinese, America..."
+                    placeholder="Japan, China, Global..."
                     type="text"
                     value={selectedActressRegion}
                   />
@@ -160,7 +170,7 @@ export function ActressesPage({
                     onClick={() => void onSaveActressRegion(activeActressEntry.name, selectedActressRegion)}
                     type="button"
                   >
-                    Save region
+                    Save country
                   </button>
                 </div>
               </div>
@@ -227,14 +237,33 @@ export function ActressesPage({
     );
   }
 
+  const performersByRegion = (() => {
+    const map = new Map<string, ActressEntry[]>();
+    const source = performerImportedOnly ? actressDirectory.filter((p) => p.count > 0) : actressDirectory;
+    for (const performer of source) {
+      const region = normalizeRegion(performer.region);
+      const list = map.get(region) ?? [];
+      list.push(performer);
+      map.set(region, list);
+    }
+
+    const knownOrder = REGION_OPTIONS.map(normalizeRegion);
+    const unknownRegions = Array.from(map.keys())
+      .filter((region) => !knownOrder.includes(region))
+      .sort((a, b) => a.localeCompare(b));
+
+    const orderedRegions = [...knownOrder, ...unknownRegions];
+    return { map, orderedRegions };
+  })();
+
   return (
     <section className="page actresses-page">
       <div className="panel actresses-overview-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Actress profiles</p>
+            <p className="eyebrow">Performer profiles</p>
             <h3>
-              {actressDirectory.length} actress{actressDirectory.length !== 1 ? "es" : ""} in your
+              {actressDirectory.length} performer{actressDirectory.length !== 1 ? "s" : ""} in your
               library
             </h3>
           </div>
@@ -251,6 +280,14 @@ export function ActressesPage({
                 <option value="tag">3. Tag</option>
               </select>
             </div>
+            <label className="performer-imported-only">
+              <input
+                type="checkbox"
+                checked={performerImportedOnly}
+                onChange={(e) => setPerformerImportedOnly(e.target.checked)}
+              />
+              <span>Imported only</span>
+            </label>
             <button
               className="actress-zoom-btn"
               disabled={actressGridCols >= 9}
@@ -319,54 +356,71 @@ export function ActressesPage({
           ))}
         </div>
         {actressDirectory.length > 0 ? (
-          <div
-            className="actress-grid"
-            style={{ "--actress-cols": actressGridCols } as React.CSSProperties}
-          >
-            {actressDirectory.map((actress) => (
-              <button
-                className="actress-card"
-                key={actress.name}
-                onClick={() => setSelectedActress(actress.name)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setActressContextMenu({ name: actress.name, x: e.clientX, y: e.clientY });
-                }}
-                title={`View ${actress.name}'s titles`}
-                type="button"
-              >
-                <div className="actress-photo">
-                  <div className="actress-avatar">
-                    {actress.posterUrl ? (
-                      <img
-                        alt={actress.name}
-                        className="actress-avatar-img"
-                        src={actress.posterUrl}
-                      />
-                    ) : (
-                      <div className="actress-avatar-fallback">
-                        {actress.name
-                          .split(" ")
-                          .map((w) => w[0])
-                          .slice(0, 2)
-                          .join("")
-                          .toUpperCase()}
-                      </div>
-                    )}
+          <div className="actress-region-groups">
+            {performersByRegion.orderedRegions.map((region) => {
+              const items = performersByRegion.map.get(region) ?? [];
+              if (items.length === 0) {
+                return null;
+              }
+
+              return (
+                <section className="actress-region-section" key={region}>
+                  <header className="actress-region-header">
+                    <h4>{region}</h4>
+                    <span>{items.length} performer{items.length !== 1 ? "s" : ""}</span>
+                  </header>
+                  <div
+                    className="actress-grid"
+                    style={{ "--actress-cols": actressGridCols } as React.CSSProperties}
+                  >
+                    {items.map((actress) => (
+                      <button
+                        className="actress-card"
+                        key={actress.name}
+                        onClick={() => setSelectedActress(actress.name)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setActressContextMenu({ name: actress.name, x: e.clientX, y: e.clientY });
+                        }}
+                        title={`View ${actress.name}'s titles`}
+                        type="button"
+                      >
+                        <div className="actress-photo">
+                          <div className="actress-avatar">
+                            {actress.posterUrl ? (
+                              <img
+                                alt={actress.name}
+                                className="actress-avatar-img"
+                                src={actress.posterUrl}
+                              />
+                            ) : (
+                              <div className="actress-avatar-fallback">
+                                {actress.name
+                                  .split(" ")
+                                  .map((w) => w[0])
+                                  .slice(0, 2)
+                                  .join("")
+                                  .toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="actress-overlay">
+                            <strong className="actress-name">{actress.name}</strong>
+                            <span className="actress-count">
+                              {actress.count} title{actress.count !== 1 ? "s" : ""}
+                              {actress.inferred ? " · 📁" : ""}
+                            </span>
+                            <span className="actress-count actress-meta-line">{normalizeRegion(actress.region)}</span>
+                            <span className="actress-count actress-meta-line">{actress.studio}</span>
+                            <span className="actress-count actress-meta-line">{actress.tag}</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                  <div className="actress-overlay">
-                    <strong className="actress-name">{actress.name}</strong>
-                    <span className="actress-count">
-                      {actress.count} title{actress.count !== 1 ? "s" : ""}
-                      {actress.inferred ? " · 📁" : ""}
-                    </span>
-                    <span className="actress-count actress-meta-line">{actress.region}</span>
-                    <span className="actress-count actress-meta-line">{actress.studio}</span>
-                    <span className="actress-count actress-meta-line">{actress.tag}</span>
-                  </div>
-                </div>
-              </button>
-            ))}
+                </section>
+              );
+            })}
           </div>
         ) : (
           <p className="subtle">

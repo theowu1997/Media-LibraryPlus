@@ -434,10 +434,10 @@ export async function enrichActressPhotos(
     if (!actress.trim()) continue;
     if (database.getActressPhoto(actress)) continue; // already cached
     try {
-      const photoUrl = await fetchActressPhotoFromJavDatabase(actress);
-      if (photoUrl) {
-        database.setActressPhoto(actress, photoUrl);
-      }
+      const regionHint = database.getActressRegion(actress) ?? "";
+      const photoUrl = await fetchActressPhoto(actress, regionHint);
+      if (!photoUrl) continue;
+      database.setActressPhoto(actress, photoUrl);
     } catch {
       // silently skip — photo fetch is best-effort
     }
@@ -502,6 +502,142 @@ async function fetchActressPhotoFromJavDatabase(name: string): Promise<string | 
   // Fallback: look for idol image pattern
   const imgMatch = html.match(/<img[^>]+class="[^"]*idol[^"]*"[^>]+src="([^"]+)"/i);
   return imgMatch?.[1] ?? null;
+}
+
+async function fetchActressPhoto(name: string, regionHint: string): Promise<string | null> {
+  const normalizedRegion = regionHint.trim().toLowerCase();
+  const preferNonJav =
+    normalizedRegion &&
+    !normalizedRegion.includes("japan") &&
+    !normalizedRegion.includes("jav");
+
+  const strategies: Array<"wikipedia" | "javdatabase" | "bing"> = preferNonJav
+    ? ["wikipedia", "bing", "javdatabase"]
+    : ["javdatabase", "wikipedia", "bing"];
+
+  for (const strategy of strategies) {
+    try {
+      if (strategy === "javdatabase") {
+        const url = await fetchActressPhotoFromJavDatabase(name);
+        if (url) return url;
+      }
+
+      if (strategy === "wikipedia") {
+        const url = await fetchActressPhotoFromWikipedia(name, normalizedRegion);
+        if (url) return url;
+      }
+
+      if (strategy === "bing") {
+        const url = await fetchActressPhotoFromBingImages(name);
+        if (url) return url;
+      }
+    } catch {
+      // try next strategy
+    }
+  }
+
+  return null;
+}
+
+async function fetchActressPhotoFromWikipedia(name: string, normalizedRegion: string): Promise<string | null> {
+  const wikiHosts = resolveWikipediaHosts(normalizedRegion);
+  for (const host of wikiHosts) {
+    const params = new URLSearchParams({
+      action: "query",
+      generator: "search",
+      gsrsearch: name,
+      gsrlimit: "1",
+      prop: "pageimages",
+      piprop: "thumbnail",
+      pithumbsize: "520",
+      format: "json",
+      redirects: "1",
+    });
+
+    const response = await fetchWithTimeout(`https://${host}/w/api.php?${params.toString()}`, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+      }
+    });
+
+    if (!response.ok) {
+      continue;
+    }
+
+    const payload = (await response.json()) as {
+      query?: {
+        pages?: Record<string, { thumbnail?: { source?: string } }>;
+      };
+    };
+
+    const pages = payload.query?.pages;
+    if (!pages) {
+      continue;
+    }
+
+    const first = Object.values(pages)[0];
+    const source = first?.thumbnail?.source;
+    if (typeof source === "string" && source.trim()) {
+      return source;
+    }
+  }
+
+  return null;
+}
+
+function resolveWikipediaHosts(normalizedRegion: string): string[] {
+  if (normalizedRegion.includes("china") || normalizedRegion.includes("chinese") || normalizedRegion.includes("taiwan")) {
+    return ["zh.wikipedia.org", "en.wikipedia.org"];
+  }
+
+  if (normalizedRegion.includes("japan") || normalizedRegion.includes("jp")) {
+    return ["ja.wikipedia.org", "en.wikipedia.org"];
+  }
+
+  if (normalizedRegion.includes("korea") || normalizedRegion.includes("kr")) {
+    return ["ko.wikipedia.org", "en.wikipedia.org"];
+  }
+
+  return ["en.wikipedia.org"];
+}
+
+async function fetchActressPhotoFromBingImages(name: string): Promise<string | null> {
+  const query = `${name} portrait`;
+  const params = new URLSearchParams({
+    q: query,
+    first: "1",
+    adlt: "off",
+  });
+
+  const response = await fetchWithTimeout(`https://www.bing.com/images/search?${params.toString()}`, {
+    headers: {
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    }
+  });
+
+  if (!response.ok) return null;
+
+  const html = await response.text();
+  const murlMatch = html.match(/"murl":"([^"]+)"/i);
+  if (!murlMatch?.[1]) {
+    return null;
+  }
+
+  return decodeBingEscapes(murlMatch[1]);
+}
+
+function decodeBingEscapes(value: string): string {
+  return value
+    .replace(/\\u002f/g, "/")
+    .replace(/\\u003a/g, ":")
+    .replace(/\\u0026/g, "&")
+    .replace(/\\u003d/g, "=")
+    .replace(/\\u002b/g, "+")
+    .replace(/\\\\/g, "\\");
 }
 
 async function fetchJavDatabaseMetadata(

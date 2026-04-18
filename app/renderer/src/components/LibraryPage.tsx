@@ -3,6 +3,24 @@ import type React from "react";
 import type { LibraryMode, MovieRecord } from "../../../shared/contracts";
 import { MovieTile } from "./MovieTile";
 
+const LIBRARY_TILE_FIELDS_STORAGE_KEY = "mla.library.tileFields.v1";
+
+const DISPLAY_FIELD_OPTIONS = [
+  { id: "fullTitle", label: "Full Title" },
+  { id: "dvdId", label: "DVDID" },
+  { id: "actress", label: "Actress" },
+  { id: "tag", label: "Tag" },
+  { id: "genre", label: "Genre" },
+  { id: "censored", label: "Censored" },
+  { id: "uncensored", label: "Uncensored" },
+  { id: "studio", label: "Studio" },
+  { id: "year", label: "Year" },
+] as const;
+
+type LibraryTileDisplayField = (typeof DISPLAY_FIELD_OPTIONS)[number]["id"];
+
+const DEFAULT_TILE_FIELDS: LibraryTileDisplayField[] = ["fullTitle", "dvdId", "actress", "year"];
+
 type SortMode =
   | "actress"
   | "import-date"
@@ -64,6 +82,33 @@ export function LibraryPage({
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const scanMenuRef = useRef<HTMLDivElement | null>(null);
   const [showScanMenu, setShowScanMenu] = useState(false);
+  const fieldsMenuRef = useRef<HTMLDivElement | null>(null);
+  const [showFieldsMenu, setShowFieldsMenu] = useState(false);
+  const [tileDisplayFields, setTileDisplayFields] = useState<LibraryTileDisplayField[]>(() => {
+    try {
+      const raw = window.localStorage.getItem(LIBRARY_TILE_FIELDS_STORAGE_KEY);
+      if (!raw) {
+        return DEFAULT_TILE_FIELDS;
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) {
+        return DEFAULT_TILE_FIELDS;
+      }
+      const allowed = new Set(DISPLAY_FIELD_OPTIONS.map((opt) => opt.id));
+      const normalized = parsed.filter((value): value is LibraryTileDisplayField => typeof value === "string" && allowed.has(value as LibraryTileDisplayField));
+      return normalized.length > 0 ? Array.from(new Set(normalized)) : DEFAULT_TILE_FIELDS;
+    } catch {
+      return DEFAULT_TILE_FIELDS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LIBRARY_TILE_FIELDS_STORAGE_KEY, JSON.stringify(tileDisplayFields));
+    } catch {
+      // ignore persistence failures (private mode, storage disabled, etc.)
+    }
+  }, [tileDisplayFields]);
 
   useEffect(() => {
     if (movies.length >= movieTotalCount) {
@@ -98,19 +143,38 @@ export function LibraryPage({
   }, [movies.length, movieTotalCount, loadMoreMovies]);
 
   useEffect(() => {
-    if (!showScanMenu) {
+    if (!showScanMenu && !showFieldsMenu) {
       return;
     }
 
     function handlePointerDown(event: MouseEvent): void {
-      if (scanMenuRef.current && !scanMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedOutsideScanMenu =
+        showScanMenu && scanMenuRef.current && !scanMenuRef.current.contains(target);
+      const clickedOutsideFieldsMenu =
+        showFieldsMenu && fieldsMenuRef.current && !fieldsMenuRef.current.contains(target);
+
+      if (clickedOutsideScanMenu) {
         setShowScanMenu(false);
+      }
+      if (clickedOutsideFieldsMenu) {
+        setShowFieldsMenu(false);
       }
     }
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [showScanMenu]);
+  }, [showScanMenu, showFieldsMenu]);
+
+  function toggleField(field: LibraryTileDisplayField): void {
+    setTileDisplayFields((current) => {
+      if (current.includes(field)) {
+        const next = current.filter((value) => value !== field);
+        return next.length > 0 ? next : current;
+      }
+      return [...current, field];
+    });
+  }
 
   return (
     <section className="page library-page">
@@ -200,6 +264,41 @@ export function LibraryPage({
                   </div>
                 )}
               </div>
+              <div className="scan-popup-anchor" ref={fieldsMenuRef}>
+                <button
+                  className="secondary-button"
+                  onClick={() => setShowFieldsMenu((current) => !current)}
+                  type="button"
+                >
+                  Movie fields
+                </button>
+                {showFieldsMenu && (
+                  <div className="scan-mode-popup fields-popup">
+                    <div className="fields-popup-header">
+                      <span className="fields-popup-title">Show on cards</span>
+                      <button
+                        className="fields-popup-reset"
+                        onClick={() => setTileDisplayFields(DEFAULT_TILE_FIELDS)}
+                        type="button"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                    <div className="fields-popup-grid">
+                      {DISPLAY_FIELD_OPTIONS.map((option) => (
+                        <label className="fields-popup-item" key={option.id}>
+                          <input
+                            type="checkbox"
+                            checked={tileDisplayFields.includes(option.id)}
+                            onChange={() => toggleField(option.id)}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 className="ghost-button"
                 disabled={isScanning}
@@ -248,6 +347,7 @@ export function LibraryPage({
                 isActive={movie.id === selectedMovieId}
                 isSelected={selectedIdSet.has(movie.id)}
                 showCheckbox
+                displayFields={tileDisplayFields}
                 viewMode="grid"
                 onContextMenu={(e) => {
                   e.preventDefault();

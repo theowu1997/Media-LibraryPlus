@@ -8,8 +8,8 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { AppPage, LibraryMode, MovieRecord } from "../../../shared/contracts";
-import { deriveRegionLabel, deriveStudioName, deriveTagLabel, inferActressFromPath } from "../utils";
+import type { AppPage, BuiltinPerformerProfile, LibraryMode, MovieRecord } from "../../../shared/contracts";
+import { deriveRegionLabel, deriveStudioName, deriveTagLabel } from "../utils";
 
 const PAGE_SIZE = 200;
 
@@ -43,6 +43,8 @@ export function useLibrary({
   const [selectedActress, setSelectedActress] = useState<string | null>(null);
   const [actressModeFilter, setActressModeFilter] = useState<"all" | "normal" | "gentle">("all");
   const [actressSortMode, setActressSortMode] = useState<"count" | "studio" | "tag">("count");
+  const [performerImportedOnly, setPerformerImportedOnly] = useState(false);
+  const [builtinPerformers, setBuiltinPerformers] = useState<BuiltinPerformerProfile[]>([]);
   const [actressGridCols, setActressGridCols] = useState(() => {
     const saved = localStorage.getItem("mla-actress-cols");
     return saved ? Math.max(2, Math.min(9, Number(saved))) : 5;
@@ -95,6 +97,34 @@ export function useLibrary({
     [movies, sortMode]
   );
 
+  useEffect(() => {
+    if (!desktopApi?.listBuiltinPerformers) {
+      return;
+    }
+
+    void desktopApi
+      .listBuiltinPerformers()
+      .then((profiles: BuiltinPerformerProfile[]) => {
+        if (!Array.isArray(profiles)) {
+          return;
+        }
+        const normalized = profiles
+          .map((profile) => ({
+            name: typeof profile?.name === "string" ? profile.name.trim() : "",
+            country: typeof profile?.country === "string" ? profile.country.trim() : undefined,
+            photoUrl:
+              profile?.photoUrl === null
+                ? null
+                : typeof profile?.photoUrl === "string"
+                  ? profile.photoUrl.trim()
+                  : undefined,
+          }))
+          .filter((profile) => profile.name.length > 0);
+        setBuiltinPerformers(normalized);
+      })
+      .catch(() => undefined);
+  }, [desktopApi]);
+
   const actressDirectory = useMemo(() => {
     const pool = allMoviesPool.length > 0 ? allMoviesPool : movies;
     const filtered =
@@ -124,14 +154,11 @@ export function useLibrary({
       return winner;
     }
     for (const movie of filtered) {
-      const actresses =
-        movie.actresses.length > 0
-          ? movie.actresses
-          : (() => {
-              const inferred = inferActressFromPath(movie.sourcePath);
-              return inferred ? [inferred] : [];
-            })();
-      const inferred = movie.actresses.length === 0;
+      const actresses = movie.actresses;
+      if (actresses.length === 0) {
+        continue;
+      }
+      const inferred = false;
       for (const actress of actresses) {
         const entry: ActressAggregate = data.get(actress) ?? {
           count: 0,
@@ -173,6 +200,21 @@ export function useLibrary({
         studio: getDominantLabel(info.studios),
         tag: getDominantLabel(info.tags),
       }))
+      .concat(
+        builtinPerformers
+          .filter((profile) => !data.has(profile.name))
+          .map((profile) => ({
+            name: profile.name,
+            count: 0,
+            posterUrl: actressPhotos[profile.name] ?? profile.photoUrl ?? null,
+            movieIds: [],
+            inferred: false,
+            modes: [] as LibraryMode[],
+            region: actressRegions[profile.name] ?? profile.country ?? "Unknown",
+            studio: "Unknown",
+            tag: "Unknown",
+          }))
+      )
       .sort((a, b) => {
         switch (actressSortMode) {
           case "studio":
@@ -184,7 +226,7 @@ export function useLibrary({
             return b.count - a.count || a.name.localeCompare(b.name);
         }
       });
-  }, [allMoviesPool, movies, actressModeFilter, actressPhotos, actressRegions, actressSortMode]);
+  }, [allMoviesPool, movies, actressModeFilter, actressPhotos, actressRegions, actressSortMode, builtinPerformers]);
 
   // Reset pagination and refresh when search or gentle-lock status changes
   useEffect(() => {
@@ -311,6 +353,8 @@ export function useLibrary({
     setActressModeFilter,
     actressSortMode,
     setActressSortMode,
+    performerImportedOnly,
+    setPerformerImportedOnly,
     actressGridCols,
     changeActressGridCols,
     gridColumns,

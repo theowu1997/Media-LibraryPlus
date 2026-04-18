@@ -1,5 +1,6 @@
 import type {
   AppShellState,
+  BuiltinPerformerProfile,
   MetadataSettings,
   LibraryMode,
   MovieRecord,
@@ -47,6 +48,7 @@ declare global {
       getActressRegions: () => Promise<Record<string, string>>;
       getActressRegion: (name: string) => Promise<string | null>;
       refreshActressPhotos: () => Promise<Record<string, string>>;
+      listBuiltinPerformers: () => Promise<BuiltinPerformerProfile[]>;
       actressSetPhoto: (name: string) => Promise<Record<string, string>>;
       actressRemovePhoto: (name: string, photoUrl?: string) => Promise<Record<string, string>>;
       actressListPhotos: (name: string) => Promise<string[]>;

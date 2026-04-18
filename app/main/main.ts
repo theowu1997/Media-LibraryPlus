@@ -256,6 +256,44 @@ function resolveSubGenScriptPath(): string {
   return path.join(app.getAppPath(), "resources", "subgen", "generate_subtitles.py");
 }
 
+function resolveBuiltinPerformersPath(): string {
+  return path.join(app.getAppPath(), "resources", "builtin-performers.json");
+}
+
+async function readBuiltinPerformers(): Promise<Array<{ name: string; country?: string; photoUrl?: string | null }>> {
+  try {
+    const filePath = resolveBuiltinPerformersPath();
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    const result: Array<{ name: string; country?: string; photoUrl?: string | null }> = [];
+    for (const entry of parsed) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+      const record = entry as Record<string, unknown>;
+      const name = typeof record.name === "string" ? record.name.trim() : "";
+      if (!name) {
+        continue;
+      }
+      const country = typeof record.country === "string" ? record.country.trim() : undefined;
+      const photoUrl =
+        record.photoUrl === null
+          ? null
+          : typeof record.photoUrl === "string"
+            ? record.photoUrl.trim()
+            : undefined;
+      result.push({ name, country, photoUrl });
+    }
+    return result;
+  } catch {
+    return [];
+  }
+}
+
 function buildSubGenSetupMessage(detail?: string): string {
   const suffix = detail ? ` ${detail}` : "";
   return `Sub-Gen needs a working Python install plus the local subtitle-model packages from resources/subgen/requirements.txt, then try again.${suffix}`;
@@ -894,6 +932,10 @@ function registerHandlers(): void {
   ipcMain.handle("actress:setPrimaryPhoto", async (_event, name: string, photoUrl: string) => {
     database.setPrimaryActressPhoto(name, photoUrl);
     return database.getAllActressPhotos();
+  });
+
+  ipcMain.handle("performers:listBuiltin", async () => {
+    return readBuiltinPerformers();
   });
 
   ipcMain.handle("player:fetchSubtitles", async (_event, dvdId: string): Promise<OnlineSubtitleResult[]> => {

@@ -53,7 +53,7 @@ const pages: { id: AppPage; label: string }[] = [
   { id: "home", label: "Home" },
   { id: "library", label: "Library" },
   { id: "search", label: "Sub-Gen" },
-  { id: "actresses", label: "Actresses" },
+  { id: "actresses", label: "Performers" },
   { id: "player", label: "▶ Player" },
   { id: "settings", label: "Settings" }
 ];
@@ -136,6 +136,7 @@ export function App() {
     selectedActress, setSelectedActress,
     actressModeFilter, setActressModeFilter,
     actressSortMode, setActressSortMode,
+    performerImportedOnly, setPerformerImportedOnly,
     actressGridCols, changeActressGridCols,
     gridColumns, changeGridColumns,
     sortedMovies, actressDirectory, deferredSearch,
@@ -548,16 +549,18 @@ export function App() {
             selectedActress={selectedActress}
             setSelectedActress={setSelectedActress}
             actressGridCols={actressGridCols}
-          changeActressGridCols={changeActressGridCols}
-          actressModeFilter={actressModeFilter}
-          setActressModeFilter={setActressModeFilter}
-          actressSortMode={actressSortMode}
-          setActressSortMode={setActressSortMode}
-          isRefreshingActressPhotos={isRefreshingActressPhotos}
-          setIsRefreshingActressPhotos={setIsRefreshingActressPhotos}
-          actressPhotos={actressPhotos}
-          setActressPhotos={setActressPhotos}
-          allMoviesPool={allMoviesPool}
+            changeActressGridCols={changeActressGridCols}
+            actressModeFilter={actressModeFilter}
+            setActressModeFilter={setActressModeFilter}
+            actressSortMode={actressSortMode}
+            setActressSortMode={setActressSortMode}
+            performerImportedOnly={performerImportedOnly}
+            setPerformerImportedOnly={setPerformerImportedOnly}
+            isRefreshingActressPhotos={isRefreshingActressPhotos}
+            setIsRefreshingActressPhotos={setIsRefreshingActressPhotos}
+            actressPhotos={actressPhotos}
+            setActressPhotos={setActressPhotos}
+            allMoviesPool={allMoviesPool}
           movies={movies}
           selectedMovieId={selectedMovieId}
             setSelectedMovieId={setSelectedMovieId}

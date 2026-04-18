@@ -84,6 +84,12 @@ export interface MovieRecord {
   updatedAt: string;
 }
 
+export interface BuiltinPerformerProfile {
+  name: string;
+  country?: string;
+  photoUrl?: string | null;
+}
+
 export interface LibraryRoots {
   normal: string[];
   gentle: string[];
