@@ -16,6 +16,8 @@ const defaultMetadataDraft: MetadataSettings = {
   language: "en-US",
   region: "US",
   autoFetchWebPosters: true,
+  tmdbNonCommercialUse: false,
+  sourceProfile: "auto",
 };
 
 const defaultOrganizationDraft: OrganizationSettings = {
@@ -23,7 +25,8 @@ const defaultOrganizationDraft: OrganizationSettings = {
 };
 
 export const defaultScanOptions: ScanAutomationOptions = {
-  importOnlyCompleteVideos: true,
+  fastScan: false,
+  importOnlyCompleteVideos: false,
   importBetterQuality: true,
   autoResolveDuplicates: false,
   moveRename: false,
@@ -32,6 +35,8 @@ export const defaultScanOptions: ScanAutomationOptions = {
   resolveLongPath: true,
   autoConvertToMp4: false,
   autoMatchSubtitle: true,
+  autoDownloadSubtitleFromSubtitleCat: true,
+  preferredSubtitleLanguage: "zh-hans",
   addToNormalModeLibrary: true,
   addToGentleModeLibrary: false,
 };
@@ -48,6 +53,7 @@ export function useSettings({ desktopApi, onStateChange, onStatus }: UseSettings
   const [metadataDraft, setMetadataDraft] = useState<MetadataSettings>(defaultMetadataDraft);
   const [organizationDraft, setOrganizationDraft] =
     useState<OrganizationSettings>(defaultOrganizationDraft);
+  const [themeModeDraft, setThemeModeDraft] = useState<"dark" | "light">("dark");
   const [focusedOrganizationField, setFocusedOrganizationField] =
     useState<keyof OrganizationSettings>("gentlePathTemplate");
   const [scanOptionsDraft, setScanOptionsDraft] =
@@ -56,6 +62,19 @@ export function useSettings({ desktopApi, onStateChange, onStatus }: UseSettings
   function initFromAppState(state: AppShellState): void {
     setMetadataDraft(state.metadataSettings);
     setOrganizationDraft(state.organizationSettings);
+    setThemeModeDraft(state.themeMode);
+  }
+
+  async function handleSaveThemeMode(): Promise<void> {
+    if (!desktopApi) {
+      onStatus("Desktop bridge unavailable. Restart MLA+ and try again.");
+      return;
+    }
+
+    const nextState = await desktopApi.setThemeMode(themeModeDraft);
+    onStateChange(nextState);
+    setThemeModeDraft(nextState.themeMode);
+    onStatus(`Theme saved. UI is now using ${nextState.themeMode} mode.`);
   }
 
   async function handleSaveMetadataSettings(): Promise<void> {
@@ -69,6 +88,13 @@ export function useSettings({ desktopApi, onStateChange, onStatus }: UseSettings
       language: metadataDraft.language.trim() || "en-US",
       region: metadataDraft.region.trim() || "US",
       autoFetchWebPosters: metadataDraft.autoFetchWebPosters,
+      tmdbNonCommercialUse: metadataDraft.tmdbNonCommercialUse,
+      sourceProfile:
+        metadataDraft.sourceProfile === "adult-first" ||
+        metadataDraft.sourceProfile === "mainstream-first" ||
+        metadataDraft.sourceProfile === "local-only"
+          ? metadataDraft.sourceProfile
+          : "auto",
     };
 
     const nextState = await desktopApi.saveMetadataSettings(normalized);
@@ -76,9 +102,13 @@ export function useSettings({ desktopApi, onStateChange, onStatus }: UseSettings
     setMetadataDraft(nextState.metadataSettings);
     setOrganizationDraft(nextState.organizationSettings);
     onStatus(
-      normalized.tmdbReadAccessToken
+      normalized.sourceProfile === "local-only"
+        ? "Metadata settings saved. The app will use local posters only."
+        : normalized.sourceProfile === "mainstream-first"
+        ? "Metadata settings saved. The app will prefer title-based matches first."
+        : normalized.tmdbReadAccessToken && normalized.tmdbNonCommercialUse
         ? "Poster settings saved. Video-ID lookup is active, and TMDB title fallback is enabled."
-        : "Poster settings saved. Video-ID lookup is active, and TMDB title fallback is off."
+        : "Poster settings saved. TMDB fallback remains off until you enable the non-commercial use checkbox."
     );
   }
 
@@ -129,10 +159,12 @@ export function useSettings({ desktopApi, onStateChange, onStatus }: UseSettings
     // State
     metadataDraft, setMetadataDraft,
     organizationDraft, setOrganizationDraft,
+    themeModeDraft, setThemeModeDraft,
     focusedOrganizationField, setFocusedOrganizationField,
     scanOptionsDraft, setScanOptionsDraft,
     // Functions
     initFromAppState,
+    handleSaveThemeMode,
     handleSaveMetadataSettings,
     handleSaveOrganizationSettings,
     insertOrganizationToken,

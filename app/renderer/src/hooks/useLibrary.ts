@@ -9,7 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { AppPage, LibraryMode, MovieRecord } from "../../../shared/contracts";
-import { inferActressFromPath } from "../utils";
+import { deriveRegionLabel, deriveStudioName, deriveTagLabel, inferActressFromPath } from "../utils";
 
 const PAGE_SIZE = 200;
 
@@ -20,6 +20,7 @@ interface UseLibraryOptions {
   /** Whether a scan is currently active (controls poster warmup effect). */
   isScanning: boolean;
   setActivePage: Dispatch<SetStateAction<AppPage>>;
+  actressRegions: Record<string, string>;
 }
 
 export function useLibrary({
@@ -27,12 +28,13 @@ export function useLibrary({
   gentleUnlocked,
   isScanning,
   setActivePage,
+  actressRegions,
 }: UseLibraryOptions) {
   const [movies, setMovies] = useState<MovieRecord[]>([]);
   const [movieTotalCount, setMovieTotalCount] = useState(0);
   const [movieLoadOffset, setMovieLoadOffset] = useState(0);
   const [sortMode, setSortMode] = useState<
-    "actress" | "import-date" | "dvd-id" | "actress-age" | "recent-add" | "oldest" | "newest"
+    "actress" | "import-date" | "dvd-id" | "studio" | "tag" | "actress-age" | "recent-add" | "oldest" | "newest"
   >("recent-add");
   const [selectedMovieId, setSelectedMovieId] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
@@ -40,13 +42,14 @@ export function useLibrary({
   const [actressPhotos, setActressPhotos] = useState<Record<string, string>>({});
   const [selectedActress, setSelectedActress] = useState<string | null>(null);
   const [actressModeFilter, setActressModeFilter] = useState<"all" | "normal" | "gentle">("all");
+  const [actressSortMode, setActressSortMode] = useState<"count" | "studio" | "tag">("count");
   const [actressGridCols, setActressGridCols] = useState(() => {
     const saved = localStorage.getItem("mla-actress-cols");
     return saved ? Math.max(2, Math.min(9, Number(saved))) : 5;
   });
   const [gridColumns, setGridColumns] = useState(() => {
     const saved = localStorage.getItem("mla-grid-cols");
-    return saved ? Math.max(3, Math.min(8, Number(saved))) : 4;
+    return saved ? Math.max(4, Math.min(8, Number(saved))) : 6;
   });
 
   const deferredSearch = useDeferredValue(searchInput);
@@ -77,6 +80,10 @@ export function useLibrary({
             return b.updatedAt.localeCompare(a.updatedAt);
           case "dvd-id":
             return (a.videoId ?? "").localeCompare(b.videoId ?? "");
+          case "studio":
+            return deriveStudioName(a).localeCompare(deriveStudioName(b));
+          case "tag":
+            return deriveTagLabel(a).localeCompare(deriveTagLabel(b));
           case "oldest":
             return (a.year ?? 9999) - (b.year ?? 9999);
           case "newest":
@@ -89,23 +96,33 @@ export function useLibrary({
   );
 
   const actressDirectory = useMemo(() => {
-    const raw = allMoviesPool.length > 0 ? allMoviesPool : movies;
-    // When gentle mode is locked, exclude gentle-library movies entirely
-    const pool = gentleUnlocked ? raw : raw.filter((m) => m.libraryMode !== "gentle");
+    const pool = allMoviesPool.length > 0 ? allMoviesPool : movies;
     const filtered =
       actressModeFilter === "all"
         ? pool
         : pool.filter((m) => m.libraryMode === actressModeFilter);
-    const data = new Map<
-      string,
-      {
-        count: number;
-        posterUrl: string | null;
-        movieIds: string[];
-        inferred: boolean;
-        modes: Set<LibraryMode>;
+    type ActressAggregate = {
+      count: number;
+      posterUrl: string | null;
+      movieIds: string[];
+      inferred: boolean;
+      modes: Set<LibraryMode>;
+      studios: Map<string, number>;
+      tags: Map<string, number>;
+      regions: Map<string, number>;
+    };
+    const data = new Map<string, ActressAggregate>();
+    function getDominantLabel(values: Map<string, number>): string {
+      let winner = "Unknown";
+      let winnerCount = -1;
+      for (const [label, count] of values.entries()) {
+        if (count > winnerCount || (count === winnerCount && label.localeCompare(winner) < 0)) {
+          winner = label;
+          winnerCount = count;
+        }
       }
-    >();
+      return winner;
+    }
     for (const movie of filtered) {
       const actresses =
         movie.actresses.length > 0
@@ -116,16 +133,25 @@ export function useLibrary({
             })();
       const inferred = movie.actresses.length === 0;
       for (const actress of actresses) {
-        const entry = data.get(actress) ?? {
+        const entry: ActressAggregate = data.get(actress) ?? {
           count: 0,
           posterUrl: null,
           movieIds: [],
           inferred,
-          modes: new Set(),
+          modes: new Set<LibraryMode>(),
+          studios: new Map<string, number>(),
+          tags: new Map<string, number>(),
+          regions: new Map<string, number>(),
         };
         entry.count += 1;
         entry.movieIds.push(movie.id);
         entry.modes.add(movie.libraryMode);
+        const studio = deriveStudioName(movie);
+        entry.studios.set(studio, (entry.studios.get(studio) ?? 0) + 1);
+        const tag = deriveTagLabel(movie);
+        entry.tags.set(tag, (entry.tags.get(tag) ?? 0) + 1);
+        const region = deriveRegionLabel(movie);
+        entry.regions.set(region, (entry.regions.get(region) ?? 0) + 1);
         const dedicatedPhoto = actressPhotos[actress] ?? null;
         if (!entry.posterUrl) {
           entry.posterUrl = dedicatedPhoto ?? movie.posterUrl ?? null;
@@ -143,9 +169,22 @@ export function useLibrary({
         movieIds: info.movieIds,
         inferred: info.inferred,
         modes: Array.from(info.modes) as LibraryMode[],
+        region: actressRegions[name] ?? getDominantLabel(info.regions),
+        studio: getDominantLabel(info.studios),
+        tag: getDominantLabel(info.tags),
       }))
-      .sort((a, b) => b.count - a.count);
-  }, [allMoviesPool, movies, actressModeFilter, actressPhotos, gentleUnlocked]);
+      .sort((a, b) => {
+        switch (actressSortMode) {
+          case "studio":
+            return a.studio.localeCompare(b.studio) || a.name.localeCompare(b.name);
+          case "tag":
+            return a.tag.localeCompare(b.tag) || a.name.localeCompare(b.name);
+          case "count":
+          default:
+            return b.count - a.count || a.name.localeCompare(b.name);
+        }
+      });
+  }, [allMoviesPool, movies, actressModeFilter, actressPhotos, actressRegions, actressSortMode]);
 
   // Reset pagination and refresh when search or gentle-lock status changes
   useEffect(() => {
@@ -238,7 +277,7 @@ export function useLibrary({
   }
 
   function changeGridColumns(cols: number): void {
-    const clamped = Math.max(3, Math.min(8, cols));
+    const clamped = Math.max(4, Math.min(8, cols));
     setGridColumns(clamped);
     localStorage.setItem("mla-grid-cols", String(clamped));
   }
@@ -270,6 +309,8 @@ export function useLibrary({
     setSelectedActress,
     actressModeFilter,
     setActressModeFilter,
+    actressSortMode,
+    setActressSortMode,
     actressGridCols,
     changeActressGridCols,
     gridColumns,

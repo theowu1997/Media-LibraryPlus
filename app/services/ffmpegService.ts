@@ -25,6 +25,8 @@ interface ProcessResult {
   stderr: string;
 }
 
+const FFPROBE_TIMEOUT_MS = 15000;
+
 function resolveBinary(
   candidates: Array<string | null | undefined>,
   fallbackCommand: string
@@ -44,10 +46,13 @@ function resolveBinary(
 }
 
 export function resolveFfmpegPaths(): FfmpegPaths {
+  const developmentBasePath = path.resolve(process.cwd(), "resources/ffmpeg/win32-x64");
   const basePath =
     process.env.NODE_ENV === "development"
-      ? path.resolve(process.cwd(), "resources/ffmpeg/win32-x64")
-      : path.resolve(process.resourcesPath, "ffmpeg/win32-x64");
+      ? developmentBasePath
+      : typeof process.resourcesPath === "string"
+        ? path.resolve(process.resourcesPath, "ffmpeg/win32-x64")
+        : developmentBasePath;
 
   return {
     ffmpeg: resolveBinary(
@@ -78,7 +83,9 @@ export async function probeVideoFile(filePath: string): Promise<VideoProbeResult
       "-show_format",
       "-show_streams",
       filePath
-    ]);
+    ], {
+      timeoutMs: FFPROBE_TIMEOUT_MS
+    });
 
     const payload = JSON.parse(result.stdout) as {
       streams?: Array<{
@@ -153,15 +160,27 @@ async function runProcess(
   args: string[],
   options?: {
     inheritOutput?: boolean;
+    timeoutMs?: number;
   }
 ): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
+    let settled = false;
     const processHandle = spawn(command, args, {
       stdio: options?.inheritOutput ? "inherit" : "pipe",
       windowsHide: true
     });
+    const timeoutHandle = options?.timeoutMs
+      ? setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          processHandle.kill();
+          reject(new Error(`${command} timed out after ${options.timeoutMs} ms.`));
+        }, options.timeoutMs)
+      : null;
 
     if (!options?.inheritOutput) {
       processHandle.stdout?.on("data", (chunk: Buffer) => {
@@ -173,8 +192,24 @@ async function runProcess(
       });
     }
 
-    processHandle.once("error", (error) => reject(error));
+    processHandle.once("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+      reject(error);
+    });
     processHandle.once("exit", (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
       if (code === 0) {
         resolve({
           stdout: Buffer.concat(stdoutChunks).toString("utf8"),

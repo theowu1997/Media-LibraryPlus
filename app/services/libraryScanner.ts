@@ -5,20 +5,20 @@ import { probeVideoFile, runFfmpeg } from "./ffmpegService";
 import {
   enrichMoviePoster,
   enrichActressPhotos,
-  fetchOnlineMovieMetadataByVideoId,
+  resolveOnlineMovieMetadata,
   type OnlineMovieMetadata
 } from "./metadataService";
 import {
   buildTargetSubtitlePath,
   buildTargetVideoPath,
   ensureLibraryTargetDirectory,
-  readNfoMetadata,
-  savePosterToFolder,
   writeMovieNfo
 } from "./libraryLayout";
+import { moveFile } from "./fileService";
 import type {
   DuplicateFile,
   DuplicateGroup,
+  MetadataSettings,
   LibraryMode,
   LibraryRoots,
   OrganizationSettings,
@@ -27,9 +27,11 @@ import type {
   ScanProgress,
   ScanRejectedFile,
   ScanSummary,
+  SubtitleLanguagePreference,
   SubtitleRecord
 } from "../shared/contracts";
 import {
+  KNOWN_VIDEO_EXTENSIONS,
   SUBTITLE_EXTENSIONS,
   VIDEO_EXTENSIONS
 } from "../shared/contracts";
@@ -61,6 +63,12 @@ interface ProcessingResult {
   folderPath: string;
   subtitles: SubtitleCandidate[];
   warnings: string[];
+  subtitleSearchLog: string | null;
+}
+
+interface DownloadedSubtitleResult {
+  subtitle: SubtitleCandidate;
+  matchedQuery: string;
 }
 
 type ValidationResult =
@@ -73,16 +81,38 @@ type ValidationResult =
       reason: string;
     };
 
+const SUBTITLE_FETCH_TIMEOUT_MS = 12000;
+
+async function fetchWithTimeout(
+  input: string,
+  init?: RequestInit,
+  timeoutMs = SUBTITLE_FETCH_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
+
 export const DEFAULT_SCAN_OPTIONS: ScanAutomationOptions = {
-  importOnlyCompleteVideos: true,
+  fastScan: false,
+  importOnlyCompleteVideos: false,
   importBetterQuality: true,
   autoResolveDuplicates: false,
-  moveRename: false,
+  moveRename: true,
   copyToLibrary: false,
   scanAllSubfolders: true,
   resolveLongPath: true,
   autoConvertToMp4: false,
   autoMatchSubtitle: true,
+  autoDownloadSubtitleFromSubtitleCat: true,
+  preferredSubtitleLanguage: "zh-hans",
   addToNormalModeLibrary: true,
   addToGentleModeLibrary: false
 };
@@ -112,12 +142,14 @@ export async function scanLibraries(
     ...DEFAULT_SCAN_OPTIONS,
     ...options?.scanOptions
   };
+  const fastScanEnabled = scanOptions.fastScan;
   const metadataSettings = database.getMetadataSettings();
   const organizationSettings = database.getOrganizationSettings();
   let imported = 0;
   let skipped = 0;
   let processedFiles = 0;
   const errors: string[] = [];
+  const subtitleSearchLogs: string[] = [];
   const invalidFiles: ScanRejectedFile[] = [];
   const candidates: ScanCandidate[] = [];
 
@@ -130,7 +162,7 @@ export async function scanLibraries(
     totalFiles: 0,
     imported: 0,
     skipped: 0,
-    message: "Preparing sequential scan..."
+    message: fastScanEnabled ? "Preparing fast scan..." : "Preparing sequential scan..."
   });
 
   for (const libraryMode of ["normal", "gentle"] as const) {
@@ -148,11 +180,24 @@ export async function scanLibraries(
       });
 
       try {
-        const videoFiles = await walkForVideos(root, scanOptions.scanAllSubfolders);
+        const videoFiles = await walkForVideos(root, scanOptions.scanAllSubfolders, invalidFiles, (warning) => {
+          errors.push(`${libraryMode}:${warning}`);
+        });
         for (const videoFile of videoFiles) {
-          const parsed = parseMetadata(
+          const parsedFromName = parseMetadata(
             path.basename(videoFile, path.extname(videoFile))
           );
+          const parsed: ParsedMetadata = { ...parsedFromName };
+          if (parsed.resolution === "Unknown") {
+            try {
+              const probe = await probeVideoFile(videoFile);
+              if (probe.valid && typeof probe.height === "number") {
+                parsed.resolution = resolutionFromHeight(probe.height);
+              }
+            } catch {
+              // Keep filename-derived resolution if probing fails during discovery.
+            }
+          }
           candidates.push({
             mode: libraryMode,
             root,
@@ -200,6 +245,7 @@ export async function scanLibraries(
       imported,
       skipped,
       errors,
+      subtitleSearchLogs,
       invalidFiles,
       duplicateGroups: [],
       scannedRoots: rootsToScan,
@@ -229,6 +275,18 @@ export async function scanLibraries(
       }))
     }));
 
+  // Diagnostic: log duplicate groups and file details for verification
+  if (duplicateGroups.length > 0) {
+    for (const dg of duplicateGroups) {
+      // eslint-disable-next-line no-console
+      console.log(`[scanner] DuplicateGroup key=${dg.key} videoId=${dg.videoId} title=${dg.title}`);
+      for (const f of dg.files) {
+        // eslint-disable-next-line no-console
+        console.log(`[scanner]  - ${f.path} size=${f.fileSize} res=${f.resolution} auto=${f.autoSelected}`);
+      }
+    }
+  }
+
   for (const group of processingGroups) {
     if (cancelToken?.cancelled) break;
     let importedFromGroup = false;
@@ -256,40 +314,41 @@ export async function scanLibraries(
         continue;
       }
 
-      if (scanOptions.importOnlyCompleteVideos) {
-        const validation = await validateCandidateBeforeImport(candidate.videoFile);
-        if (!validation.ok) {
-          skipped += 1;
-          invalidFiles.push({
-            path: candidate.videoFile,
-            reason: validation.reason,
-            status: validation.status
-          });
-          errors.push(
-            `${candidate.mode}:${candidate.videoFile} - ${validation.reason}`
-          );
-          processedFiles += 1;
-          continue;
-        }
+      const validation = await validateCandidateBeforeImport(
+        candidate.videoFile,
+        scanOptions.importOnlyCompleteVideos,
+        fastScanEnabled
+      );
+      if (!validation.ok) {
+        skipped += 1;
+        invalidFiles.push({
+          path: candidate.videoFile,
+          reason: validation.reason,
+          status: validation.status
+        });
+        errors.push(
+          `${candidate.mode}:${candidate.videoFile} - ${validation.reason}`
+        );
+        processedFiles += 1;
+        continue;
       }
 
       try {
-        const onlineMetadata = await resolveOnlineImportMetadata(
-          candidate.mode,
-          candidate.parsed.videoId
-        );
-        // Read .nfo sidecar for metadata (actresses, title, etc.)
-        const nfoData = await readNfoMetadata(candidate.videoFile);
-
-        // Merge actress info: online > nfo > empty
-        const actresses = onlineMetadata?.actresses?.length
-          ? onlineMetadata.actresses
-          : nfoData.actresses?.length
-            ? nfoData.actresses
-            : [];
+        const onlineMetadata = fastScanEnabled
+          ? null
+          : await resolveOnlineImportMetadata(
+              candidate.mode,
+              candidate.parsed.videoId,
+              candidate.parsed.title,
+              candidate.parsed.year,
+              candidate.videoFile,
+              metadataSettings
+            );
+        const resolvedVideoId = onlineMetadata?.videoId ?? candidate.parsed.videoId;
+        const actresses = onlineMetadata?.actresses ?? [];
 
         // Fetch actress profile photos in background (best-effort)
-        if (actresses.length > 0) {
+        if (!fastScanEnabled && actresses.length > 0) {
           void enrichActressPhotos(database, actresses);
         }
         const subtitles = scanOptions.autoMatchSubtitle
@@ -301,10 +360,10 @@ export async function scanLibraries(
           root: candidate.root,
           videoPath: candidate.videoFile,
           title: candidate.parsed.title,
-          year: candidate.parsed.year ?? nfoData.year ?? null,
-          videoId: candidate.parsed.videoId ?? nfoData.videoId ?? null,
+          year: candidate.parsed.year,
+          videoId: resolvedVideoId,
           actresses,
-          modelName: onlineMetadata?.modelName ?? nfoData.studio ?? null,
+          modelName: onlineMetadata?.modelName ?? null,
           subtitles,
           organizationSettings,
           scanOptions
@@ -312,6 +371,9 @@ export async function scanLibraries(
 
         for (const warning of processed.warnings) {
           errors.push(`${candidate.mode}:${processed.videoPath} - ${warning}`);
+        }
+        if (processed.subtitleSearchLog) {
+          subtitleSearchLogs.push(`${candidate.parsed.title} - ${processed.subtitleSearchLog}`);
         }
 
         const existingId = database.findMovieIdBySourcePath(processed.videoPath);
@@ -326,7 +388,7 @@ export async function scanLibraries(
           id: movieId,
           title: candidate.parsed.title,
           year: candidate.parsed.year,
-          videoId: candidate.parsed.videoId,
+          videoId: resolvedVideoId,
           sourcePath: processed.videoPath,
           folderPath: processed.folderPath,
           libraryMode: candidate.mode,
@@ -340,33 +402,25 @@ export async function scanLibraries(
         imported += 1;
         importedFromGroup = scanOptions.importBetterQuality;
 
-        try {
-          await enrichMoviePoster(database, movieId, metadataSettings, {
-            onProgress,
-            progress: {
-              stage: "processing",
-              mode,
-              currentRoot: candidate.root,
-              currentFile: processed.videoPath,
-              processedFiles,
-              totalFiles,
-              imported,
-              skipped,
-              message: `Fetching web poster for ${candidate.parsed.title}`
-            }
-          });
-        } catch (error) {
-          errors.push(`${candidate.mode}:${processed.videoPath} - ${formatError(error)}`);
-        }
-
-        // Save poster image file into the movie folder
-        try {
-          const posterMovie = database.getMovie(movieId);
-          if (posterMovie?.posterUrl?.startsWith("http")) {
-            await savePosterToFolder(processed.folderPath, posterMovie.posterUrl);
+        if (!fastScanEnabled) {
+          try {
+            await enrichMoviePoster(database, movieId, metadataSettings, {
+              onProgress,
+              progress: {
+                stage: "processing",
+                mode,
+                currentRoot: candidate.root,
+                currentFile: processed.videoPath,
+                processedFiles,
+                totalFiles,
+                imported,
+                skipped,
+                message: `Fetching web poster for ${candidate.parsed.title}`
+              }
+            });
+          } catch (error) {
+            errors.push(`${candidate.mode}:${processed.videoPath} - ${formatError(error)}`);
           }
-        } catch {
-          // Best-effort — ignore poster save failures
         }
       } catch (error) {
         skipped += 1;
@@ -398,6 +452,7 @@ export async function scanLibraries(
     imported,
     skipped,
     errors,
+    subtitleSearchLogs,
     invalidFiles,
     duplicateGroups,
     scannedRoots: rootsToScan,
@@ -405,23 +460,44 @@ export async function scanLibraries(
   };
 }
 
-async function walkForVideos(root: string, recursive: boolean): Promise<string[]> {
-  const entries = await fs.readdir(root, {
-    withFileTypes: true
-  });
+async function walkForVideos(
+  root: string,
+  recursive: boolean,
+  rejectedFiles: ScanRejectedFile[],
+  onWarning?: (warning: string) => void
+): Promise<string[]> {
+  let entries;
+  try {
+    entries = await fs.readdir(root, {
+      withFileTypes: true
+    });
+  } catch (error) {
+    onWarning?.(`${root} - ${formatError(error)}`);
+    return [];
+  }
   const videoFiles: string[] = [];
 
   for (const entry of entries) {
     const resolved = path.join(root, entry.name);
     if (entry.isDirectory()) {
       if (recursive) {
-        videoFiles.push(...(await walkForVideos(resolved, true)));
+        videoFiles.push(...(await walkForVideos(resolved, true, rejectedFiles, onWarning)));
       }
       continue;
     }
 
-    if (VIDEO_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())) {
+    const extension = path.extname(entry.name).toLowerCase();
+    if (VIDEO_EXTENSIONS.includes(extension as (typeof VIDEO_EXTENSIONS)[number])) {
       videoFiles.push(resolved);
+      continue;
+    }
+
+    if (KNOWN_VIDEO_EXTENSIONS.includes(extension as (typeof KNOWN_VIDEO_EXTENSIONS)[number])) {
+      rejectedFiles.push({
+        path: resolved,
+        status: "unsupported",
+        reason: `Unsupported video format "${extension}".`
+      });
     }
   }
 
@@ -473,21 +549,20 @@ async function applyProcessingOptions(params: {
   let currentVideoPath = params.videoPath;
   let currentFolderPath = path.dirname(currentVideoPath);
   let currentSubtitles = [...params.subtitles];
+  let subtitleSearchLog: string | null = null;
   const originalVideoDirectory = path.dirname(params.videoPath);
-  const workspaceRoot =
-    params.libraryMode === "gentle"
-      ? params.organizationSettings.gentleLibraryPath
-      : params.organizationSettings.normalLibraryPath;
-  const targetRoot = workspaceRoot.trim() || params.root;
-  // Always organize: rename + move into structured library folders
-  const needsOrganizedPlacement = true;
+  const needsOrganizedPlacement =
+    params.libraryMode === "gentle" ||
+    params.scanOptions.moveRename ||
+    params.scanOptions.resolveLongPath ||
+    params.scanOptions.autoConvertToMp4;
 
   if (
     params.scanOptions.autoConvertToMp4 &&
     path.extname(currentVideoPath).toLowerCase() !== ".mp4"
   ) {
     const convertDirectory = needsOrganizedPlacement
-      ? await ensureLibraryTargetDirectory(targetRoot, {
+      ? await ensureLibraryTargetDirectory(params.root, {
           libraryMode: params.libraryMode,
           title: params.title,
           year: params.year,
@@ -524,7 +599,7 @@ async function applyProcessingOptions(params: {
 
   if (needsOrganizedPlacement) {
     try {
-      const targetDirectory = await ensureLibraryTargetDirectory(targetRoot, {
+      const targetDirectory = await ensureLibraryTargetDirectory(params.root, {
         libraryMode: params.libraryMode,
         title: params.title,
         year: params.year,
@@ -596,23 +671,50 @@ async function applyProcessingOptions(params: {
     currentSubtitles = movedSubtitles;
   }
 
-  // Write .nfo sidecar for all library modes
-  if (needsOrganizedPlacement) {
+  if (
+    !params.scanOptions.fastScan &&
+    params.scanOptions.autoDownloadSubtitleFromSubtitleCat &&
+    params.videoId &&
+    currentSubtitles.length === 0
+  ) {
     try {
-      await writeMovieNfo({
+      const downloadedSubtitle = await downloadBestSubtitleFromSubtitleCat({
         directory: currentFolderPath,
-        libraryMode: params.libraryMode,
         title: params.title,
         year: params.year,
         videoId: params.videoId,
         actresses: params.actresses,
         modelName: params.modelName,
-        sourcePath: currentVideoPath,
+        preferredLanguage: params.scanOptions.preferredSubtitleLanguage,
+        resolveLongPath: params.scanOptions.resolveLongPath,
         organizationSettings: params.organizationSettings
       });
+
+      if (downloadedSubtitle) {
+        currentSubtitles = [downloadedSubtitle.subtitle];
+        subtitleSearchLog = downloadedSubtitle.matchedQuery === params.videoId
+          ? `SubtitleCat matched using video ID "${downloadedSubtitle.matchedQuery}".`
+          : `SubtitleCat matched using fallback query "${downloadedSubtitle.matchedQuery}".`;
+      }
     } catch (error) {
-      warnings.push(`NFO write failed: ${formatError(error)}`);
+      warnings.push(`SubtitleCat download failed: ${formatError(error)}`);
     }
+  }
+
+  try {
+    await writeMovieNfo({
+      directory: currentFolderPath,
+      libraryMode: params.libraryMode,
+      title: params.title,
+      year: params.year,
+      videoId: params.videoId,
+      actresses: params.actresses,
+      modelName: params.modelName,
+      sourcePath: currentVideoPath,
+      organizationSettings: params.organizationSettings
+    });
+  } catch (error) {
+    warnings.push(`NFO write failed: ${formatError(error)}`);
   }
 
   await cleanupDirectory(originalVideoDirectory);
@@ -624,7 +726,8 @@ async function applyProcessingOptions(params: {
     videoPath: currentVideoPath,
     folderPath: currentFolderPath,
     subtitles: currentSubtitles,
-    warnings
+    warnings,
+    subtitleSearchLog
   };
 }
 
@@ -641,6 +744,236 @@ async function convertVideoToMp4(sourcePath: string, targetPath: string): Promis
     "+faststart",
     targetPath
   ]);
+}
+
+async function downloadBestSubtitleFromSubtitleCat(params: {
+  directory: string;
+  title: string;
+  year: number | null;
+  videoId: string;
+  actresses: string[];
+  modelName: string | null;
+  preferredLanguage: SubtitleLanguagePreference;
+  resolveLongPath: boolean;
+  organizationSettings: OrganizationSettings;
+}): Promise<DownloadedSubtitleResult | null> {
+  const searchQueries = buildSubtitleSearchQueries(params.videoId, params.title);
+  const { query: matchedQuery, results } = await fetchSubtitleCatResultsForQueries(searchQueries);
+  if (!matchedQuery || results.length === 0) {
+    return null;
+  }
+
+  const preferred =
+    results.find((result) => matchesPreferredSubtitleLanguage(result, params.preferredLanguage)) ??
+    results.find((result) => matchesPreferredSubtitleLanguage(result, "en")) ??
+    results[0];
+  const content = await downloadSubtitleContent(preferred.downloadUrl);
+  if (!content) {
+    return null;
+  }
+
+  const targetSubtitlePath = await ensureUniquePath(
+    buildTargetSubtitlePath({
+      directory: params.directory,
+      title: params.title,
+      year: params.year,
+      videoId: params.videoId,
+      actresses: params.actresses,
+      modelName: params.modelName,
+      language: preferred.languageCode || "und",
+      extension: ".srt",
+      subtitleCount: 1,
+      resolveLongPath: params.resolveLongPath,
+      organizationSettings: params.organizationSettings
+    })
+  );
+
+  await fs.writeFile(targetSubtitlePath, content, "utf8");
+
+  return {
+    subtitle: {
+      language: (preferred.languageCode || "und").toUpperCase(),
+      path: targetSubtitlePath
+    },
+    matchedQuery
+  };
+}
+
+async function fetchSubtitleCatResultsForQueries(
+  queries: string[]
+): Promise<{ query: string | null; results: SubtitleCatResult[] }> {
+  for (const query of queries) {
+    const results = await fetchSubtitleCatResults(query);
+    if (results.length > 0) {
+      return { query, results };
+    }
+  }
+
+  return { query: null, results: [] };
+}
+
+function buildSubtitleSearchQueries(videoId: string, title: string): string[] {
+  const cleanedTitle = title
+    .replace(/[._]+/g, " ")
+    .replace(/\b(19\d{2}|20\d{2})\b/g, " ")
+    .replace(/\b(2160p|1080p|720p|480p|4k|bluray|webrip|x264|x265|aac|h264)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return Array.from(
+    new Set(
+      [videoId, cleanedTitle, title]
+        .map((value) => value.trim())
+        .filter((value) => value.length >= 3)
+    )
+  );
+}
+
+interface SubtitleCatResult {
+  id: string;
+  title: string;
+  language: string;
+  languageCode: string;
+  downloadUrl: string;
+  downloads: number;
+}
+
+async function fetchSubtitleCatResults(query: string): Promise<SubtitleCatResult[]> {
+  async function searchOnce(q: string): Promise<SubtitleCatResult[]> {
+    const url = `https://www.subtitlecat.com/index.php?search=${encodeURIComponent(q)}`;
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5"
+      }
+    });
+    if (!response.ok) return [];
+    const html = await response.text();
+    const results: SubtitleCatResult[] = [];
+    const lines = html.split(/\r?\n/);
+
+    for (const line of lines) {
+      const linkMatch = line.match(/href=\"(\/sub\/[^\"]+\.srt)\"/i);
+      if (!linkMatch) continue;
+
+      const rawUrl = linkMatch[1];
+      const downloadUrl = `https://www.subtitlecat.com${rawUrl}`;
+      const titleMatch = line.match(/>([^<]{3,})<\/a>/i);
+      const title = titleMatch?.[1]?.trim() ?? q;
+      const langMatch =
+        line.match(/translated from ([A-Za-z]+)/i) ??
+        line.match(/alt=\"([A-Za-z ]{2,30})\"/i);
+      const language = langMatch?.[1]?.trim() ?? "Unknown";
+      const languageCode = language.toLowerCase().slice(0, 2) || "und";
+      const downloadsMatch =
+        line.match(/(\d[\d,]*)\s*(?:downloads?|dl)\b/i) ??
+        line.match(/⬇\s*(\d[\d,]*)/i);
+      const downloads = downloadsMatch ? Number(downloadsMatch[1].replace(/,/g, "")) : 0;
+      const id = `${languageCode}-${results.length}`;
+
+      if (!results.some((result) => result.downloadUrl === downloadUrl)) {
+        results.push({ id, title, language, languageCode, downloadUrl, downloads });
+      }
+    }
+
+    const normalizedQuery = q.toUpperCase();
+    return results
+      .filter(
+        (result) =>
+          result.title.toUpperCase().includes(normalizedQuery) ||
+          normalizedQuery.includes(result.title.toUpperCase())
+      )
+      .sort((left, right) => right.downloads - left.downloads || left.title.localeCompare(right.title))
+      .slice(0, 30);
+  }
+
+  try {
+    let results = await searchOnce(query);
+    if (results.length === 0 && query !== query.toUpperCase()) {
+      results = await searchOnce(query.toUpperCase());
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+async function downloadSubtitleContent(url: string): Promise<string | null> {
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
+function matchesPreferredSubtitleLanguage(
+  result: SubtitleCatResult,
+  preferredLanguage: SubtitleLanguagePreference
+): boolean {
+  const language = result.language.toLowerCase();
+  const code = result.languageCode.toLowerCase();
+
+  if (preferredLanguage === "zh-hans") {
+    return code === "zh" || language.includes("simplified") || language.includes("chinese simplified");
+  }
+
+  if (preferredLanguage === "zh-hant") {
+    return code === "zh" || language.includes("traditional") || language.includes("chinese traditional");
+  }
+
+  if (preferredLanguage === "zh") {
+    return code === "zh" || language.includes("chinese");
+  }
+
+  return code === preferredLanguage || language.includes(expandLanguageLabel(preferredLanguage));
+}
+
+function expandLanguageLabel(preferredLanguage: SubtitleLanguagePreference): string {
+  switch (preferredLanguage) {
+    case "en":
+      return "english";
+    case "ja":
+      return "japanese";
+    case "ko":
+      return "korean";
+    case "fr":
+      return "french";
+    case "es":
+      return "spanish";
+    case "de":
+      return "german";
+    case "pt":
+      return "portuguese";
+    case "th":
+      return "thai";
+    case "vi":
+      return "vietnamese";
+    case "id":
+      return "indonesian";
+    case "ar":
+      return "arabic";
+    case "ru":
+      return "russian";
+    case "it":
+      return "italian";
+    case "zh-hans":
+      return "simplified";
+    case "zh-hant":
+      return "traditional";
+    case "zh":
+      return "chinese";
+    default:
+      return preferredLanguage;
+  }
 }
 
 function buildProcessingGroups(
@@ -668,13 +1001,34 @@ function buildProcessingGroups(
 }
 
 function compareCandidateQuality(left: ScanCandidate, right: ScanCandidate): number {
+  // Primary preference: higher actual/video-derived resolution
   const leftResolution = resolutionScore(left.parsed.resolution);
   const rightResolution = resolutionScore(right.parsed.resolution);
-  if (leftResolution !== rightResolution) {
-    return leftResolution - rightResolution;
+  if (leftResolution !== rightResolution) return leftResolution - rightResolution;
+
+  // Secondary preference: larger file size
+  const sizeDiff = left.fileSize - right.fileSize;
+  if (sizeDiff !== 0) return sizeDiff;
+
+  // Secondary preference: prefer base name (no A/B suffix) over suffixed variants
+  const leftStem = path.basename(left.videoFile, path.extname(left.videoFile));
+  const rightStem = path.basename(right.videoFile, path.extname(right.videoFile));
+  const leftSuffixMatch = leftStem.match(/[- _]([A-Za-z])$/);
+  const rightSuffixMatch = rightStem.match(/[- _]([A-Za-z])$/);
+  const leftSuffix = leftSuffixMatch ? leftSuffixMatch[1].toUpperCase() : null;
+  const rightSuffix = rightSuffixMatch ? rightSuffixMatch[1].toUpperCase() : null;
+
+  if (leftSuffix && !rightSuffix) return -1; // right is base -> prefer right
+  if (!leftSuffix && rightSuffix) return 1;  // left is base -> prefer left
+
+  // If both have single-letter suffixes, prefer A over B
+  if (leftSuffix && rightSuffix && leftSuffix !== rightSuffix) {
+    if (leftSuffix === "A" && rightSuffix === "B") return 1;
+    if (leftSuffix === "B" && rightSuffix === "A") return -1;
   }
 
-  return left.fileSize - right.fileSize;
+  // Fallback to resolution score
+  return 0;
 }
 
 function resolutionScore(resolution: string): number {
@@ -693,14 +1047,33 @@ function resolutionScore(resolution: string): number {
   }
 }
 
+function resolutionFromHeight(height: number): string {
+  if (height >= 2160) return "2160P";
+  if (height >= 1080) return "1080P";
+  if (height >= 720) return "720P";
+  if (height >= 480) return "480P";
+  return "Unknown";
+}
+
 function normalizeForKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 async function validateCandidateBeforeImport(
-  filePath: string
+  filePath: string,
+  enforceMinimumDuration = true,
+  fastScanEnabled = false
 ): Promise<ValidationResult> {
-  const stableCheck = await ensureFileIsStable(filePath);
+  const extension = path.extname(filePath).toLowerCase();
+  if (!VIDEO_EXTENSIONS.includes(extension as (typeof VIDEO_EXTENSIONS)[number])) {
+    return {
+      ok: false,
+      status: "unsupported",
+      reason: `Unsupported video format "${extension || "unknown"}".`
+    };
+  }
+
+  const stableCheck = await ensureFileIsStable(filePath, fastScanEnabled);
   if (!stableCheck.ok) {
     return stableCheck;
   }
@@ -714,10 +1087,25 @@ async function validateCandidateBeforeImport(
     };
   }
 
+  if (
+    enforceMinimumDuration &&
+    typeof probeResult.durationSeconds === "number" &&
+    probeResult.durationSeconds < 20 * 60
+  ) {
+    return {
+      ok: false,
+      status: "incomplete",
+      reason: "File is shorter than 20 minutes and was blocked by the optional complete-video rule."
+    };
+  }
+
   return { ok: true };
 }
 
-async function ensureFileIsStable(filePath: string): Promise<ValidationResult> {
+async function ensureFileIsStable(
+  filePath: string,
+  fastScanEnabled = false
+): Promise<ValidationResult> {
   try {
     const firstStats = await fs.stat(filePath);
     if (firstStats.size <= 0) {
@@ -725,6 +1113,14 @@ async function ensureFileIsStable(filePath: string): Promise<ValidationResult> {
         ok: false,
         status: "invalid",
         reason: "File is empty."
+      };
+    }
+
+    const ageMs = Date.now() - firstStats.mtimeMs;
+    const skipRecheck = fastScanEnabled || ageMs > 2 * 60 * 1000;
+    if (skipRecheck) {
+      return {
+        ok: true
       };
     }
 
@@ -837,15 +1233,36 @@ function parseMetadata(stem: string): ParsedMetadata {
 }
 
 async function resolveOnlineImportMetadata(
-  _mode: LibraryMode,
-  videoId: string | null
+  mode: LibraryMode,
+  videoId: string | null,
+  title: string,
+  year: number | null,
+  sourcePath: string,
+  metadataSettings: MetadataSettings
 ): Promise<OnlineMovieMetadata | null> {
-  if (!videoId) {
-    return null;
-  }
-
   try {
-    return await fetchOnlineMovieMetadataByVideoId(videoId);
+    return await resolveOnlineMovieMetadata(
+      {
+        title,
+        year,
+        videoId,
+        sourcePath
+      },
+      metadataSettings,
+      {
+        progress: {
+          stage: "processing",
+          mode,
+          currentRoot: null,
+          currentFile: sourcePath,
+          processedFiles: 0,
+          totalFiles: 0,
+          imported: 0,
+          skipped: 0,
+          message: "Resolving metadata"
+        }
+      }
+    );
   } catch {
     return null;
   }
@@ -927,37 +1344,7 @@ async function ensureUniquePath(initialPath: string): Promise<string> {
 /** Robust file move for Windows + cross-device scenarios.
  *  Handles: EXDEV (cross-drive), EPERM/EACCES (read-only attr / ACL),
  *  EBUSY (file locked — retries up to 5× with 300 ms back-off). */
-async function moveFile(sourcePath: string, targetPath: string): Promise<void> {
-  // Retry loop for locked files (EBUSY / EPERM on Windows)
-  const RETRIES = 5;
-  const RETRY_DELAY_MS = 300;
-
-  for (let attempt = 1; attempt <= RETRIES; attempt++) {
-    try {
-      await fs.rename(sourcePath, targetPath);
-      return; // success
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-
-      // Transient lock — wait and retry
-      if ((code === "EBUSY" || code === "EPERM") && attempt < RETRIES) {
-        await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
-        continue;
-      }
-
-      // Cross-device OR persistent permission error → fall back to copy + delete
-      if (code === "EXDEV" || code === "EPERM" || code === "EACCES") {
-        await fs.copyFile(sourcePath, targetPath);
-        // Strip read-only attribute before deleting (Windows ACL)
-        await fs.chmod(sourcePath, 0o666).catch(() => undefined);
-        await fs.unlink(sourcePath);
-        return;
-      }
-
-      throw error;
-    }
-  }
-}
+// Use robust moveFile from fileService (handles long-path, locks, EXDEV, etc.)
 
 async function cleanupDirectory(directory: string): Promise<void> {
   if (!(await exists(directory))) {

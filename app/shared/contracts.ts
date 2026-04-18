@@ -15,6 +15,33 @@ export interface SubtitleRecord {
   path: string;
 }
 
+export type SubtitleGenerationLanguage =
+  | "auto"
+  | "translate-en"
+  | "translate-zh"
+  | "translate-km";
+export type SubtitleGenerationModel = "small" | "medium" | "large-v3";
+export type SubtitleGenerationOutputMode =
+  | "library-default"
+  | "output-srt"
+  | "custom-name";
+
+export interface SubtitleGenerationOptions {
+  language: SubtitleGenerationLanguage;
+  model: SubtitleGenerationModel;
+  outputMode: SubtitleGenerationOutputMode;
+  customFileName?: string;
+}
+
+export interface SubtitleGenerationResult {
+  ok: boolean;
+  message: string;
+  subtitlePath: string | null;
+  detectedLanguage: string | null;
+  outputLanguage: string | null;
+  setupRequired: boolean;
+}
+
 export interface OnlineSubtitleResult {
   id: string;
   title: string;
@@ -30,7 +57,14 @@ export interface PlayerSettings {
   subtitleColor: string;
   autoPlayNext: boolean;
   rememberPosition: boolean;
-  seekDuration: number;
+  videoFilterPreset: "none" | "vivid" | "warm" | "cool" | "mono" | "sepia";
+  videoFilterStrength: number;
+}
+
+export interface PlaybackCheckpoint {
+  movieId: string;
+  positionSeconds: number;
+  updatedAt: string;
 }
 
 export interface MovieRecord {
@@ -62,27 +96,23 @@ export interface SubtitleScanResult {
   unmatched: number;
 }
 
-export interface ConvertVideoResult {
-  ok: boolean;
-  url?: string;
-  error?: string;
-}
-
 export interface AppShellState {
   version: string;
   platform: string;
   gentleUnlocked: boolean;
+  themeMode: "dark" | "light";
   roots: LibraryRoots;
   subtitleDirs: string[];
   starterPinHint: string;
   metadataSettings: MetadataSettings;
   organizationSettings: OrganizationSettings;
+  scanHistory: ScanHistoryEntry[];
 }
 
 export interface ScanRejectedFile {
   path: string;
   reason: string;
-  status: "incomplete" | "corrupt" | "invalid";
+  status: "incomplete" | "corrupt" | "invalid" | "unsupported";
 }
 
 export interface DuplicateFile {
@@ -111,10 +141,16 @@ export interface ScanSummary {
   imported: number;
   skipped: number;
   errors: string[];
+  subtitleSearchLogs: string[];
   invalidFiles: ScanRejectedFile[];
   duplicateGroups: DuplicateGroup[];
   scannedRoots: LibraryRoots;
   cancelled: boolean;
+}
+
+export interface ScanHistoryEntry {
+  createdAt: string;
+  summary: ScanSummary;
 }
 
 export type ScanStage =
@@ -143,7 +179,15 @@ export interface MetadataSettings {
   language: string;
   region: string;
   autoFetchWebPosters: boolean;
+  tmdbNonCommercialUse: boolean;
+  sourceProfile: MetadataSourceProfile;
 }
+
+export type MetadataSourceProfile =
+  | "auto"
+  | "adult-first"
+  | "mainstream-first"
+  | "local-only";
 
 export interface OrganizationSettings {
   normalPathTemplate: string;
@@ -153,7 +197,26 @@ export interface OrganizationSettings {
   gentleLibraryPath: string;
 }
 
+export type SubtitleLanguagePreference =
+  | "en"
+  | "ja"
+  | "zh-hans"
+  | "zh-hant"
+  | "zh"
+  | "ko"
+  | "fr"
+  | "es"
+  | "de"
+  | "pt"
+  | "th"
+  | "vi"
+  | "id"
+  | "ar"
+  | "ru"
+  | "it";
+
 export interface ScanAutomationOptions {
+  fastScan: boolean;
   importOnlyCompleteVideos: boolean;
   importBetterQuality: boolean;
   autoResolveDuplicates: boolean;
@@ -163,18 +226,44 @@ export interface ScanAutomationOptions {
   resolveLongPath: boolean;
   autoConvertToMp4: boolean;
   autoMatchSubtitle: boolean;
+  autoDownloadSubtitleFromSubtitleCat: boolean;
+  preferredSubtitleLanguage: SubtitleLanguagePreference;
   addToNormalModeLibrary: boolean;
   addToGentleModeLibrary: boolean;
 }
 
 export const VIDEO_EXTENSIONS = [
+  ".3gp",
+  ".asf",
+  ".flv",
+  ".m2ts",
+  ".mpeg",
+  ".mpg",
+  ".mts",
+  ".ogv",
   ".mp4",
   ".mkv",
   ".avi",
   ".mov",
+  ".ts",
+  ".vob",
   ".wmv",
   ".m4v",
   ".webm"
+];
+
+export const KNOWN_VIDEO_EXTENSIONS = [
+  ...VIDEO_EXTENSIONS,
+  ".3gp",
+  ".asf",
+  ".flv",
+  ".m2ts",
+  ".mpeg",
+  ".mpg",
+  ".mts",
+  ".ogv",
+  ".ts",
+  ".vob"
 ];
 
 export const SUBTITLE_EXTENSIONS = [".srt", ".vtt", ".ass", ".ssa"];

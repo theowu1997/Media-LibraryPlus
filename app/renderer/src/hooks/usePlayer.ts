@@ -14,14 +14,21 @@ interface UsePlayerOptions {
   movies: MovieRecord[];
   /** Full movie pool for actress directory — preferred playlist source */
   allMoviesPool: MovieRecord[];
+  onSubtitleInstalled?: () => Promise<void> | void;
 }
 
-export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOptions) {
+export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstalled }: UsePlayerOptions) {
   // ── Refs ──────────────────────────────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const playerConfigRef = useRef<HTMLDivElement>(null);
   const positionMemoryRef = useRef<Map<string, number>>(new Map());
+  const pendingRestorePositionRef = useRef<number | null>(null);
+  const lastCheckpointSaveRef = useRef<{ movieId: string | null; positionSeconds: number }>({
+    movieId: null,
+    positionSeconds: 0,
+  });
+  const skipNextCheckpointSaveForMovieIdRef = useRef<string | null>(null);
 
   // Stable refs to latest values — used inside event-listener closures
   const playerMovieIdRef = useRef<string | null>(null);
@@ -31,12 +38,31 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
     subtitleColor: "#ffffff",
     autoPlayNext: false,
     rememberPosition: true,
-    seekDuration: 10,
+    videoFilterPreset: "none",
+    videoFilterStrength: 50,
   });
   const moviesRef = useRef<MovieRecord[]>(movies);
   moviesRef.current = movies;
   const allMoviesPoolRef = useRef<MovieRecord[]>(allMoviesPool);
   allMoviesPoolRef.current = allMoviesPool;
+  const libraryRootsRef = useRef<string[]>([]);
+
+  // Fetch app state to learn configured library roots (used to identify "imported" files)
+  useEffect(() => {
+    if (!desktopApi) return;
+    void desktopApi.getAppState().then((state) => {
+      const roots: string[] = [];
+      if (state?.roots) {
+        for (const mode of ["normal", "gentle"] as const) {
+          const arr = state.roots[mode] ?? [];
+          for (const r of arr) roots.push(r.replace(/\\/g, "/").toLowerCase());
+        }
+      }
+      libraryRootsRef.current = roots.map((r) => (r.endsWith("/") ? r : r + "/"));
+    }).catch(() => {
+      libraryRootsRef.current = [];
+    });
+  }, [desktopApi]);
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [playerMovieId, setPlayerMovieId] = useState<string | null>(null);
@@ -46,7 +72,6 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
   const [playerMuted, setPlayerMuted] = useState(false);
   const [playerCurrentTime, setPlayerCurrentTime] = useState(0);
   const [playerDuration, setPlayerDuration] = useState(0);
-  const [playerPlaybackError, setPlayerPlaybackError] = useState<string | null>(null);
   const [playerSubtitles, setPlayerSubtitles] = useState<OnlineSubtitleResult[]>([]);
   const [playerSubTrackUrl, setPlayerSubTrackUrl] = useState<string | null>(null);
   const [playerSubTrackLang, setPlayerSubTrackLang] = useState<string>("und");
@@ -63,7 +88,8 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
     subtitleColor: "#ffffff",
     autoPlayNext: false,
     rememberPosition: true,
-    seekDuration: 10,
+    videoFilterPreset: "none",
+    videoFilterStrength: 50,
   });
   const [playerShowMovieList, setPlayerShowMovieList] = useState(false);
   const [playerHoveredMovieId, setPlayerHoveredMovieId] = useState<string | null>(null);
@@ -79,11 +105,11 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
 
   // Enable subtitle track programmatically — `default` attr is unreliable for dynamically-added tracks
   useEffect(() => {
-    if (!playerSubTrackUrl || !videoRef.current) return;
+    if (!videoRef.current) return;
     const video = videoRef.current;
     const enable = () => {
       for (let i = 0; i < video.textTracks.length; i++) {
-        video.textTracks[i].mode = "showing";
+        video.textTracks[i].mode = playerSubTrackUrl ? "showing" : "disabled";
       }
     };
     enable();
@@ -104,11 +130,6 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
     videoRef.current.volume = playerVolume;
     videoRef.current.muted = playerMuted;
   }, [playerVolume, playerMuted]);
-
-  useEffect(() => {
-    if (!videoRef.current || !playerFileUrl) return;
-    videoRef.current.load();
-  }, [playerFileUrl]);
 
   // Sync playback rate to video element
   useEffect(() => {
@@ -143,16 +164,71 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
     const vtt = srtToVtt(srtContent);
     const blob = new Blob([vtt], { type: "text/vtt" });
     const url = URL.createObjectURL(blob);
-    setPlayerSubTrackLang(lang);
+    setPlayerSubTrackLang((lang || "und").toLowerCase());
     setPlayerSubTrackUrl(url);
+  }
+
+  async function persistPlaybackCheckpoint(movieId: string, positionSeconds: number): Promise<void> {
+    if (!desktopApi) return;
+
+    if (!playerSettingsRef.current.rememberPosition || positionSeconds <= 5) {
+      positionMemoryRef.current.delete(movieId);
+      pendingRestorePositionRef.current = null;
+      lastCheckpointSaveRef.current = { movieId, positionSeconds: 0 };
+      try {
+        await desktopApi.playerClearPlaybackCheckpoint(movieId);
+      } catch { /* ignore */ }
+      return;
+    }
+
+    positionMemoryRef.current.set(movieId, positionSeconds);
+    lastCheckpointSaveRef.current = { movieId, positionSeconds };
+    try {
+      await desktopApi.playerSavePlaybackCheckpoint(movieId, positionSeconds);
+    } catch { /* ignore */ }
+  }
+
+  async function handlePlaybackTimeUpdate(positionSeconds: number): Promise<void> {
+    const movieId = playerMovieIdRef.current;
+    if (!movieId || !playerSettingsRef.current.rememberPosition) {
+      return;
+    }
+
+    const roundedPosition = Math.floor(positionSeconds);
+    const lastSaved = lastCheckpointSaveRef.current;
+    if (lastSaved.movieId === movieId && Math.abs(roundedPosition - lastSaved.positionSeconds) < 5) {
+      return;
+    }
+
+    await persistPlaybackCheckpoint(movieId, roundedPosition);
+  }
+
+  async function handlePlaybackEnded(): Promise<void> {
+    const movieId = playerMovieIdRef.current;
+    if (!movieId || !desktopApi) {
+      return;
+    }
+
+    positionMemoryRef.current.delete(movieId);
+    pendingRestorePositionRef.current = null;
+    lastCheckpointSaveRef.current = { movieId, positionSeconds: 0 };
+    skipNextCheckpointSaveForMovieIdRef.current = movieId;
+    try {
+      await desktopApi.playerClearPlaybackCheckpoint(movieId);
+    } catch { /* ignore */ }
   }
 
   async function loadMovieIntoPlayer(movie: MovieRecord): Promise<void> {
     if (!desktopApi) return;
     // Save current position before switching movies
     if (playerMovieIdRef.current && playerSettingsRef.current.rememberPosition && videoRef.current) {
-      const t = videoRef.current.currentTime;
-      if (t > 5) positionMemoryRef.current.set(playerMovieIdRef.current, t);
+      const currentMovieId = playerMovieIdRef.current;
+      if (skipNextCheckpointSaveForMovieIdRef.current === currentMovieId) {
+        skipNextCheckpointSaveForMovieIdRef.current = null;
+      } else {
+        const t = videoRef.current.currentTime;
+        await persistPlaybackCheckpoint(currentMovieId, t);
+      }
     }
     setPlayerMovieId(movie.id);
     setPlayerSubTrackUrl(null);
@@ -161,11 +237,26 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
     setPlayerSubTargetLang("en");
     setPlayerSubDownloadingId(null);
     setPlayerSubHasSearched(false);
-    setPlayerPlaybackError(null);
     setPlayerCurrentTime(0);
     setPlayerDuration(0);
     setPlayerPlaying(false);
-    const fileUrl = await desktopApi.playerGetFileUrl(movie.sourcePath, movie.folderPath);
+    lastCheckpointSaveRef.current = { movieId: movie.id, positionSeconds: 0 };
+    const inMemoryPosition = positionMemoryRef.current.get(movie.id);
+    if (playerSettingsRef.current.rememberPosition && typeof inMemoryPosition === "number" && inMemoryPosition > 5) {
+      pendingRestorePositionRef.current = inMemoryPosition;
+    } else if (playerSettingsRef.current.rememberPosition) {
+      try {
+        const checkpoint = await desktopApi.playerGetPlaybackCheckpoint(movie.id);
+        pendingRestorePositionRef.current = checkpoint && checkpoint.positionSeconds > 5
+          ? checkpoint.positionSeconds
+          : null;
+      } catch {
+        pendingRestorePositionRef.current = null;
+      }
+    } else {
+      pendingRestorePositionRef.current = null;
+    }
+    const fileUrl = await desktopApi.playerGetFileUrl(movie.sourcePath);
     setPlayerFileUrl(fileUrl);
     // Auto-load first local subtitle if available
     if (movie.subtitles.length > 0) {
@@ -186,7 +277,17 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
     try {
       const content = await desktopApi.playerDownloadSubtitle(sub.downloadUrl);
       if (content) {
+        const currentMovie =
+          allMoviesPoolRef.current.find((movie) => movie.id === playerMovieIdRef.current) ??
+          moviesRef.current.find((movie) => movie.id === playerMovieIdRef.current) ??
+          null;
+        const installedPath = currentMovie
+          ? await desktopApi.playerInstallSubtitle(currentMovie.id, sub.languageCode || "und", content)
+          : null;
         applySubtitle(content, sub.languageCode || "und");
+        if (installedPath && currentMovie) {
+          await onSubtitleInstalled?.();
+        }
         setPlayerShowSubPanel(false);
       }
     } catch { /* ignore */ }
@@ -204,51 +305,32 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
       const filtered =
         playerSubTargetLang === "all"
           ? all
-          : all.filter((s) => matchesTargetLanguage(s, playerSubTargetLang));
+          : all.filter((subtitle) => matchesTargetLanguage(subtitle));
       setPlayerSubtitles(filtered.sort((left, right) => right.downloads - left.downloads || left.title.localeCompare(right.title)));
     } catch { /* ignore */ }
     setPlayerSubHasSearched(true);
     setPlayerSubSearching(false);
   }
 
-  async function convertMovieToMp4(movie: MovieRecord): Promise<boolean> {
-    if (!desktopApi) return false;
-    setPlayerPlaybackError(null);
-    setPlayerPlaying(false);
-    try {
-      const result = await desktopApi.playerConvertToMp4(movie.sourcePath);
-      if (result?.ok && result.url) {
-        setPlayerFileUrl(result.url);
-        return true;
-      }
-      if (result && !result.ok && result.error) {
-        setPlayerPlaybackError(`Conversion failed: ${result.error}`);
-        return false;
-      }
-    } catch { /* ignore */ }
-    setPlayerPlaybackError("Conversion failed. The video could not be transcoded.");
-    return false;
-  }
-
-  function matchesTargetLanguage(subtitle: OnlineSubtitleResult, targetLang: string): boolean {
-    const code = subtitle.languageCode.toLowerCase();
+  function matchesTargetLanguage(subtitle: OnlineSubtitleResult): boolean {
     const language = subtitle.language.toLowerCase();
-    const target = targetLang.toLowerCase();
+    const code = subtitle.languageCode.toLowerCase();
+    const target = playerSubTargetLang.toLowerCase();
 
     if (target === "all") {
       return true;
     }
 
     if (target === "zh-hans") {
-      return code === "zh-hans" || code === "zh" || code === "zh-cn" || code === "zh-sg" || language.includes("simplified");
+      return code === "zh" || language.includes("simplified") || language.includes("chinese simplified");
     }
 
     if (target === "zh-hant") {
-      return code === "zh-hant" || code === "zh-tw" || code === "zh-hk" || code === "zh-mo" || language.includes("traditional");
+      return code === "zh" || language.includes("traditional") || language.includes("chinese traditional");
     }
 
     if (target === "zh") {
-      return code.startsWith("zh") || language.includes("chinese");
+      return code === "zh" || language.includes("chinese");
     }
 
     return (
@@ -261,7 +343,21 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
 
   /** Navigate to next/previous movie in the playlist */
   function navigatePlaylist(direction: 1 | -1): void {
-    const pool = allMoviesPoolRef.current.length > 0 ? allMoviesPoolRef.current : moviesRef.current;
+    // Prefer explicit all-movies pool when provided. Otherwise, only include movies that
+    // are imported into configured library roots (moved/renamed into library folders).
+    const fallbackPool = ((): MovieRecord[] => {
+      const roots = libraryRootsRef.current;
+      if (roots.length === 0) return moviesRef.current;
+      return moviesRef.current.filter((m) => {
+        try {
+          const sp = (m.sourcePath ?? "").replace(/\\/g, "/").toLowerCase();
+          return roots.some((root) => sp.startsWith(root));
+        } catch {
+          return false;
+        }
+      });
+    })();
+    const pool = allMoviesPoolRef.current.length > 0 ? allMoviesPoolRef.current : fallbackPool;
     const idx = pool.findIndex((m) => m.id === playerMovieIdRef.current);
     if (direction === 1 && idx >= 0 && idx < pool.length - 1) {
       void loadMovieIntoPlayer(pool[idx + 1]);
@@ -277,6 +373,7 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
     playerConfigRef,
     playerMovieIdRef,
     positionMemoryRef,
+    pendingRestorePositionRef,
     // State
     playerMovieId, setPlayerMovieId,
     playerFileUrl, setPlayerFileUrl,
@@ -285,7 +382,6 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
     playerMuted, setPlayerMuted,
     playerCurrentTime, setPlayerCurrentTime,
     playerDuration, setPlayerDuration,
-    playerPlaybackError, setPlayerPlaybackError,
     playerSubtitles, setPlayerSubtitles,
     playerSubTrackUrl, setPlayerSubTrackUrl,
     playerSubTrackLang, setPlayerSubTrackLang,
@@ -304,7 +400,8 @@ export function usePlayer({ desktopApi, movies, allMoviesPool }: UsePlayerOption
     playerIsFullscreen,
     // Functions
     loadMovieIntoPlayer,
-    convertMovieToMp4,
+    handlePlaybackTimeUpdate,
+    handlePlaybackEnded,
     applySubtitle,
     handleDownloadSubtitle,
     handleSearchSubtitles,

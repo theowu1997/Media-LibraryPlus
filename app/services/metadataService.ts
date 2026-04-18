@@ -2,7 +2,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { DatabaseClient } from "../database/database";
 import { probeVideoFile, runFfmpeg } from "./ffmpegService";
-import type { MetadataSettings, MovieRecord, ScanProgress } from "../shared/contracts";
+import type {
+  MetadataSettings,
+  MetadataSourceProfile,
+  MovieRecord,
+  ScanProgress
+} from "../shared/contracts";
 import { expandVideoIdLookupCandidates, extractVideoId } from "../shared/videoId";
 
 interface TmdbMovieResult {
@@ -29,13 +34,31 @@ export interface OnlineMovieMetadata {
   actresses: string[];
   modelName: string | null;
   posterUrl: string | null;
-  source: "javdatabase";
-  videoId: string;
+  source: "javdatabase" | "tmdb";
+  videoId: string | null;
 }
 
 let tmdbPosterBaseUrlCache = "";
 let tmdbPosterBaseUrlCacheKey = "";
 const onlineMovieMetadataCache = new Map<string, OnlineMovieMetadata | null>();
+const METADATA_FETCH_TIMEOUT_MS = 12000;
+
+async function fetchWithTimeout(
+  input: string,
+  init?: RequestInit,
+  timeoutMs = METADATA_FETCH_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
 
 export async function enrichMoviePoster(
   database: DatabaseClient,
@@ -149,35 +172,15 @@ async function fetchPosterUrlForMovie(
     return null;
   }
 
-  const videoId = resolveMovieVideoId(movie);
-  if (videoId) {
-    options?.onProgress?.({
-      ...(options.progress ?? createFallbackProgress(movie.sourcePath)),
-      message: `Fetching online poster for ${videoId}`
-    });
-
-    const idBasedPosterUrl = await fetchPosterUrlByVideoId(videoId);
-    if (idBasedPosterUrl) {
-      return idBasedPosterUrl;
+  if (!settings.tmdbNonCommercialUse) {
+    const videoId = resolveMovieVideoId(movie);
+    if (!videoId) {
+      return null;
     }
   }
 
-  if (!settings.tmdbReadAccessToken.trim()) {
-    return null;
-  }
-
-  options?.onProgress?.({
-    ...(options.progress ?? createFallbackProgress(movie.sourcePath)),
-    message: `Fetching title-based poster for ${movie.title}`
-  });
-
-  const bestMatch = await searchTmdbMovie(movie, settings);
-  if (!bestMatch?.poster_path) {
-    return null;
-  }
-
-  const baseUrl = await getTmdbPosterBaseUrl(settings);
-  return `${baseUrl}${bestMatch.poster_path}`;
+  const metadata = await resolveOnlineMovieMetadata(movie, settings, options);
+  return metadata?.posterUrl ?? null;
 }
 
 async function searchTmdbMovie(
@@ -195,7 +198,7 @@ async function searchTmdbMovie(
     params.set("year", String(movie.year));
   }
 
-  const response = await fetch(`https://api.themoviedb.org/3/search/movie?${params.toString()}`, {
+  const response = await fetchWithTimeout(`https://api.themoviedb.org/3/search/movie?${params.toString()}`, {
     headers: {
       Authorization: `Bearer ${settings.tmdbReadAccessToken}`,
       Accept: "application/json"
@@ -220,13 +223,45 @@ async function searchTmdbMovie(
     .sort((left, right) => right.score - left.score)[0].candidate;
 }
 
+async function fetchTmdbMovieMetadata(
+  movie: Pick<MovieRecord, "title" | "year" | "sourcePath" | "videoId">,
+  settings: MetadataSettings,
+  options?: {
+    onProgress?: (progress: ScanProgress) => void;
+    progress?: ScanProgress;
+  }
+): Promise<OnlineMovieMetadata | null> {
+  if (!settings.tmdbReadAccessToken.trim() || !settings.tmdbNonCommercialUse) {
+    return null;
+  }
+
+  options?.onProgress?.({
+    ...(options.progress ?? createFallbackProgress(movie.sourcePath)),
+    message: `Fetching title-based poster for ${movie.title}`
+  });
+
+  const bestMatch = await searchTmdbMovie(movie, settings);
+  if (!bestMatch?.poster_path) {
+    return null;
+  }
+
+  const baseUrl = await getTmdbPosterBaseUrl(settings);
+  return {
+    actresses: [],
+    modelName: null,
+    posterUrl: `${baseUrl}${bestMatch.poster_path}`,
+    source: "tmdb",
+    videoId: movie.videoId ?? null
+  };
+}
+
 async function getTmdbPosterBaseUrl(settings: MetadataSettings): Promise<string> {
   const cacheKey = `${settings.tmdbReadAccessToken}:${settings.language}:${settings.region}`;
   if (tmdbPosterBaseUrlCache && tmdbPosterBaseUrlCacheKey === cacheKey) {
     return tmdbPosterBaseUrlCache;
   }
 
-  const response = await fetch("https://api.themoviedb.org/3/configuration", {
+  const response = await fetchWithTimeout("https://api.themoviedb.org/3/configuration", {
     headers: {
       Authorization: `Bearer ${settings.tmdbReadAccessToken}`,
       Accept: "application/json"
@@ -343,6 +378,54 @@ export async function fetchOnlineMovieMetadataByVideoId(
   return null;
 }
 
+export async function resolveOnlineMovieMetadata(
+  movie: Pick<MovieRecord, "title" | "year" | "sourcePath" | "videoId">,
+  settings: MetadataSettings,
+  options?: {
+    onProgress?: (progress: ScanProgress) => void;
+    progress?: ScanProgress;
+  }
+): Promise<OnlineMovieMetadata | null> {
+  const resolvedVideoId = resolveMovieVideoId(movie);
+  const profile = settings.sourceProfile ?? "auto";
+  const cacheKey = buildMetadataCacheKey(movie, settings, profile, resolvedVideoId);
+  if (onlineMovieMetadataCache.has(cacheKey)) {
+    return onlineMovieMetadataCache.get(cacheKey) ?? null;
+  }
+
+  const strategyOrder = resolveMetadataStrategyOrder(profile, Boolean(resolvedVideoId));
+  for (const strategy of strategyOrder) {
+    if (strategy === "javdatabase" && resolvedVideoId) {
+      const javMetadata = await fetchOnlineMovieMetadataByVideoId(resolvedVideoId);
+      if (javMetadata) {
+        onlineMovieMetadataCache.set(cacheKey, javMetadata);
+        return javMetadata;
+      }
+    }
+
+    if (strategy === "tmdb") {
+      if (!settings.tmdbNonCommercialUse) {
+        continue;
+      }
+      const tmdbMetadata = await fetchTmdbMovieMetadata(
+        {
+          ...movie,
+          videoId: resolvedVideoId
+        },
+        settings,
+        options
+      );
+      if (tmdbMetadata) {
+        onlineMovieMetadataCache.set(cacheKey, tmdbMetadata);
+        return tmdbMetadata;
+      }
+    }
+  }
+
+  onlineMovieMetadataCache.set(cacheKey, null);
+  return null;
+}
+
 export async function enrichActressPhotos(
   database: DatabaseClient,
   actresses: string[]
@@ -361,9 +444,47 @@ export async function enrichActressPhotos(
   }
 }
 
+function resolveMetadataStrategyOrder(
+  profile: MetadataSourceProfile,
+  hasVideoId: boolean
+): Array<"javdatabase" | "tmdb"> {
+  if (profile === "local-only") {
+    return [];
+  }
+
+  if (profile === "mainstream-first") {
+    return hasVideoId ? ["tmdb", "javdatabase"] : ["tmdb"];
+  }
+
+  if (hasVideoId) {
+    return ["javdatabase", "tmdb"];
+  }
+
+  return ["tmdb"];
+}
+
+function buildMetadataCacheKey(
+  movie: Pick<MovieRecord, "title" | "year" | "sourcePath" | "videoId">,
+  settings: MetadataSettings,
+  profile: MetadataSourceProfile,
+  resolvedVideoId: string | null
+): string {
+  return [
+    profile,
+    settings.tmdbNonCommercialUse ? "tmdb-allowed" : "tmdb-blocked",
+    settings.tmdbReadAccessToken.trim() || "notmdb",
+    settings.language,
+    settings.region,
+    resolvedVideoId ?? "",
+    normalize(movie.title),
+    movie.year ?? "",
+    path.resolve(movie.sourcePath).toLowerCase()
+  ].join("|");
+}
+
 async function fetchActressPhotoFromJavDatabase(name: string): Promise<string | null> {
   const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-  const response = await fetch(`https://www.javdatabase.com/idols/${slug}/`, {
+  const response = await fetchWithTimeout(`https://www.javdatabase.com/idols/${slug}/`, {
     headers: {
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "User-Agent":
@@ -387,7 +508,7 @@ async function fetchJavDatabaseMetadata(
   videoId: string
 ): Promise<OnlineMovieMetadata | null> {
   const slug = videoId.toLowerCase();
-  const response = await fetch(`https://www.javdatabase.com/movies/${slug}/`, {
+  const response = await fetchWithTimeout(`https://www.javdatabase.com/movies/${slug}/`, {
     headers: {
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "User-Agent":

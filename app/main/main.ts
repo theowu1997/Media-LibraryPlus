@@ -1,14 +1,13 @@
-import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
+import fs from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { app, BrowserWindow, dialog, ipcMain, shell, globalShortcut } from "electron";
 import { DatabaseClient } from "../database/database";
 import { moveMovieToMode } from "../services/fileService";
-import { DEFAULT_SCAN_OPTIONS, scanLibraries, createCancelToken, registerLocalFiles, type CancelToken } from "../services/libraryScanner";
-import { extractVideoIdCandidates } from "../shared/videoId";
-import { VIDEO_EXTENSIONS } from "../shared/contracts";
+import { buildTargetNfoPath, buildTargetSubtitlePath } from "../services/libraryLayout";
+import { DEFAULT_SCAN_OPTIONS, scanLibraries, createCancelToken, type CancelToken } from "../services/libraryScanner";
 import { enrichMoviePoster } from "../services/metadataService";
-import { runFfmpeg } from "../services/ffmpegService";
 import type {
   AppShellState,
   MetadataSettings,
@@ -23,24 +22,94 @@ import type {
   ScanMode,
   ScanProgress,
   ScanSummary,
-  SubtitleScanResult
+  SubtitleGenerationOptions,
+  SubtitleGenerationResult
 } from "../shared/contracts";
 
 let mainWindow: BrowserWindow | null = null;
 let database: DatabaseClient;
 let gentleUnlocked = false;
 let activeScanToken: CancelToken | null = null;
+// Track the currently registered gentle shortcut
+let registeredGentleShortcut: string | null = null;
+let lastGentleToggleAt = 0;
+let terminalLoggingAvailable = true;
 
-protocol.registerSchemesAsPrivileged([{
-  scheme: "mla-media",
-  privileges: {
-    standard: true,
-    secure: true,
-    supportFetchAPI: true,
-    corsEnabled: true,
-    stream: true
+function writeTerminalLine(line: string, stream: NodeJS.WriteStream = process.stdout): void {
+  if (!terminalLoggingAvailable) {
+    return;
   }
-}]);
+
+  try {
+    if (stream.destroyed || !stream.writable) {
+      terminalLoggingAvailable = false;
+      return;
+    }
+
+    stream.write(`${line}\n`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | undefined)?.code === "EPIPE") {
+      terminalLoggingAvailable = false;
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function cleanupDirectoryIfEmpty(directory: string): Promise<void> {
+  const remaining = await fs.readdir(directory).catch(() => null);
+  if (!remaining) {
+    return;
+  }
+
+  const realEntries = remaining.filter(
+    (entry) => entry !== "Thumbs.db" && entry !== "desktop.ini" && entry !== ".DS_Store"
+  );
+  if (realEntries.length === 0) {
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+async function deleteMovieArtifacts(movie: MovieRecord): Promise<void> {
+  await fs.unlink(movie.sourcePath).catch(() => undefined);
+
+  for (const subtitle of movie.subtitles) {
+    await fs.unlink(subtitle.path).catch(() => undefined);
+  }
+
+  const nfoPath = buildTargetNfoPath(movie.folderPath, {
+    libraryMode: movie.libraryMode,
+    title: movie.title,
+    year: movie.year,
+    videoId: movie.videoId,
+    actresses: movie.actresses,
+    modelName: null,
+    resolveLongPath: true,
+    organizationSettings: database.getOrganizationSettings()
+  });
+  await fs.unlink(nfoPath).catch(() => undefined);
+  await cleanupDirectoryIfEmpty(movie.folderPath);
+}
+
+function broadcastGentleState(message: string): void {
+  mainWindow?.show();
+  mainWindow?.focus();
+  mainWindow?.webContents.send("gentle:unlockResult", {
+    ok: true,
+    message
+  });
+}
+
+function toggleGentleUnlocked(reason: string): boolean {
+  gentleUnlocked = !gentleUnlocked;
+  broadcastGentleState(
+    gentleUnlocked
+      ? `Gentle library enabled for this session (${reason}).`
+      : `Gentle library disabled for this session (${reason}).`
+  );
+  return gentleUnlocked;
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -63,6 +132,45 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
+
+  // Forward renderer console messages to the main process terminal for debugging
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    const levelName = level === 0 ? "LOG" : level === 1 ? "WARNING" : level === 2 ? "ERROR" : `LVL${level}`;
+    writeTerminalLine(`[renderer:${levelName}] ${message} (${sourceId}:${line})`);
+  });
+
+  // Also log unhandled renderer crashes
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    writeTerminalLine(
+      `[renderer:CRASH] Reason=${details.reason} exitCode=${details.exitCode}`,
+      process.stderr
+    );
+  });
+
+  // Register gentle mode unlock shortcut after window is ready
+  mainWindow.once("ready-to-show", () => {
+    registerGentleUnlockShortcut();
+  });
+}
+function registerGentleUnlockShortcut() {
+  if (!mainWindow) return;
+  // Unregister previous shortcut if any
+  if (registeredGentleShortcut) {
+    globalShortcut.unregister(registeredGentleShortcut);
+    registeredGentleShortcut = null;
+  }
+  const shortcut = database.getGentleShortcut().trim() || "Ctrl+Alt+D";
+  if (shortcut && shortcut.length > 0) {
+    const ok = globalShortcut.register(shortcut, async () => {
+      const now = Date.now();
+      if (now - lastGentleToggleAt < 350) {
+        return;
+      }
+      lastGentleToggleAt = now;
+      toggleGentleUnlocked("shortcut");
+    });
+    if (ok) registeredGentleShortcut = shortcut;
+  }
 }
 
 function buildShellState(): AppShellState {
@@ -70,11 +178,13 @@ function buildShellState(): AppShellState {
     version: app.getVersion(),
     platform: process.platform,
     gentleUnlocked,
+    themeMode: database.getThemeMode(),
     roots: database.getRoots(),
-    subtitleDirs: database.getSubtitleDirs(),
     starterPinHint: database.getStarterPinHint(),
     metadataSettings: database.getMetadataSettings(),
-    organizationSettings: database.getOrganizationSettings()
+    organizationSettings: database.getOrganizationSettings(),
+    subtitleDirs: database.getSubtitleDirs(),
+    scanHistory: database.getScanHistory()
   };
 }
 
@@ -88,12 +198,13 @@ function emptyScanSummary(scannedRoots?: LibraryRoots): ScanSummary {
     imported: 0,
     skipped: 0,
     errors: [],
+    subtitleSearchLogs: [],
     invalidFiles: [],
-    duplicateGroups: [],
     scannedRoots: scannedRoots ?? {
       normal: [],
       gentle: []
     },
+    duplicateGroups: [],
     cancelled: true
   };
 }
@@ -112,22 +223,24 @@ function buildCancelledProgress(mode: ScanMode): ScanProgress {
   };
 }
 
-function buildTranscodeOutputPath(sourcePath: string): string {
-  const cacheDir = path.join(app.getPath("userData"), "player-cache");
-  fs.mkdirSync(cacheDir, { recursive: true });
-  const stat = fs.statSync(sourcePath);
-  const baseName = path.basename(sourcePath, path.extname(sourcePath));
-  const safeBase = baseName.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 60) || "video";
-  const signature = `${stat.size}-${Math.floor(stat.mtimeMs)}`;
-  return path.join(cacheDir, `${safeBase}-${signature}.mp4`);
-}
-
 function resolveTargetMode(options: ScanAutomationOptions): LibraryMode {
   if (options.addToNormalModeLibrary === options.addToGentleModeLibrary) {
     throw new Error("Select either Normal Mode library or Gentle Mode library.");
   }
 
   return options.addToGentleModeLibrary ? "gentle" : "normal";
+}
+
+function normalizeRootList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value];
+  }
+
+  return [];
 }
 
 function emptyPosterBackfillSummary(requested: number): PosterBackfillSummary {
@@ -137,6 +250,150 @@ function emptyPosterBackfillSummary(requested: number): PosterBackfillSummary {
     skipped: 0,
     errors: []
   };
+}
+
+function resolveSubGenScriptPath(): string {
+  return path.join(app.getAppPath(), "resources", "subgen", "generate_subtitles.py");
+}
+
+function buildSubGenSetupMessage(detail?: string): string {
+  const suffix = detail ? ` ${detail}` : "";
+  return `Sub-Gen needs a working Python install plus the local subtitle-model packages from resources/subgen/requirements.txt, then try again.${suffix}`;
+}
+
+function sanitizeSubtitleFileName(value: string): string {
+  const withoutExtension = value.replace(/\.srt$/i, "").trim();
+  const sanitized = withoutExtension.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim();
+  return sanitized || "subtitle";
+}
+
+async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenerationOptions): Promise<SubtitleGenerationResult> {
+  const scriptPath = resolveSubGenScriptPath();
+  try {
+    await fs.access(scriptPath);
+  } catch {
+    return {
+      ok: false,
+      message: buildSubGenSetupMessage("The generator script was not found."),
+      subtitlePath: null,
+      detectedLanguage: null,
+      outputLanguage: null,
+      setupRequired: true
+    };
+  }
+
+  const targetPath = buildTargetSubtitlePath({
+    directory: movie.folderPath,
+    title: movie.title,
+    year: movie.year,
+    videoId: movie.videoId,
+    actresses: movie.actresses,
+    modelName: movie.videoId?.split("-")[0] ?? null,
+    language:
+      options.language === "translate-en"
+        ? "en"
+        : options.language === "translate-zh"
+          ? "zh"
+          : options.language === "translate-km"
+            ? "km"
+          : "und",
+    extension: ".srt",
+    subtitleCount: Math.max(movie.subtitles.length + 1, 1),
+    resolveLongPath: true,
+    organizationSettings: database.getOrganizationSettings()
+  });
+  const finalTargetPath =
+    options.outputMode === "output-srt"
+      ? path.join(movie.folderPath, "output.srt")
+      : options.outputMode === "custom-name"
+        ? path.join(movie.folderPath, `${sanitizeSubtitleFileName(options.customFileName ?? "")}.srt`)
+      : targetPath;
+
+  const args = [scriptPath, "--input", movie.sourcePath, "--output", finalTargetPath, "--model", options.model];
+  if (options.language === "translate-en") {
+    args.push("--translate-to", "en");
+  } else if (options.language === "translate-zh") {
+    args.push("--translate-to", "zh");
+  } else if (options.language === "translate-km") {
+    args.push("--translate-to", "km");
+  }
+
+  return new Promise<SubtitleGenerationResult>((resolve) => {
+    const child = spawn("python", args, {
+      cwd: app.getAppPath(),
+      windowsHide: true
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      resolve({
+        ok: false,
+        message: buildSubGenSetupMessage(error.message),
+        subtitlePath: null,
+        detectedLanguage: null,
+        outputLanguage: null,
+        setupRequired: true
+      });
+    });
+    child.on("close", (code) => {
+      if (code !== 0) {
+        const lowered = `${stdout}\n${stderr}`.toLowerCase();
+        const setupRequired = lowered.includes("no module named") || lowered.includes("python was not found") || lowered.includes("not recognized");
+        resolve({
+          ok: false,
+          message: setupRequired ? buildSubGenSetupMessage(stderr.trim() || stdout.trim()) : (stderr.trim() || stdout.trim() || `Subtitle generation failed with exit code ${code}.`),
+          subtitlePath: null,
+          detectedLanguage: null,
+          outputLanguage: null,
+          setupRequired
+        });
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(stdout.trim()) as {
+          output: string;
+          detected_language?: string | null;
+          output_language?: string | null;
+        };
+        const detectedLanguage = payload.detected_language?.trim() || "und";
+        const outputLanguage =
+          payload.output_language?.trim() ||
+          (options.language === "translate-en"
+            ? "en"
+            : options.language === "translate-zh"
+              ? "zh"
+              : options.language === "translate-km"
+                ? "km"
+              : detectedLanguage);
+        database.upsertSubtitle(movie.id, payload.output, outputLanguage);
+        resolve({
+          ok: true,
+          message: `Subtitle generated at ${payload.output}`,
+          subtitlePath: payload.output,
+          detectedLanguage,
+          outputLanguage,
+          setupRequired: false
+        });
+      } catch {
+        resolve({
+          ok: false,
+          message: stderr.trim() || "Subtitle generation completed but returned invalid output.",
+          subtitlePath: null,
+          detectedLanguage: null,
+          outputLanguage: null,
+          setupRequired: false
+        });
+      }
+    });
+  });
 }
 
 async function backfillMoviePosters(
@@ -221,8 +478,8 @@ async function backfillMoviePosters(
 }
 
 async function fetchSubtitleCatResults(query: string): Promise<OnlineSubtitleResult[]> {
-  try {
-    const url = `https://www.subtitlecat.com/index.php?search=${encodeURIComponent(query)}`;
+  async function searchOnce(q: string): Promise<OnlineSubtitleResult[]> {
+    const url = `https://www.subtitlecat.com/index.php?search=${encodeURIComponent(q)}`;
     const response = await fetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -234,84 +491,120 @@ async function fetchSubtitleCatResults(query: string): Promise<OnlineSubtitleRes
     const html = await response.text();
     const results: OnlineSubtitleResult[] = [];
 
-    const rowRegex = /<tr[^>]*>[\s\S]*?<\/tr>/gi;
-    const rows = html.match(rowRegex) ?? [];
+    const languageNames: Record<string, string> = {
+      af: "Afrikaans",
+      ar: "Arabic",
+      bn: "Bengali",
+      de: "German",
+      en: "English",
+      es: "Spanish",
+      fr: "French",
+      hi: "Hindi",
+      id: "Indonesian",
+      it: "Italian",
+      ja: "Japanese",
+      jw: "Javanese",
+      km: "Cambodian",
+      ko: "Korean",
+      ms: "Malay",
+      pt: "Portuguese",
+      ru: "Russian",
+      ta: "Tamil",
+      th: "Thai",
+      tl: "Filipino",
+      tr: "Turkish",
+      ur: "Urdu",
+      vi: "Vietnamese",
+      zh: "Chinese",
+      "zh-cn": "Chinese (Simplified)",
+      "zh-tw": "Chinese (Traditional)"
+    };
 
-    for (const row of rows) {
-      const pageLinkMatch = row.match(/href="(subs\/[^"]+\.html)"/i);
-      if (!pageLinkMatch) continue;
+    const linkRegex = /href="(\/subs\/\d+\/([^"/]+?)-([a-z]{2}(?:-[a-z]{2})?)\.srt)"/gi;
+    for (const match of html.matchAll(linkRegex)) {
+      const rawUrl = match[1];
+      const rawTitle = decodeURIComponent(match[2] ?? q);
+      const rawLanguageCode = (match[3] ?? "und").toLowerCase();
+      const normalizedLanguageCode =
+        rawLanguageCode === "zh-cn" || rawLanguageCode === "zh-tw"
+          ? rawLanguageCode
+          : rawLanguageCode.slice(0, 2);
+      const title = rawTitle.replace(/[-_.]+/g, " ").trim() || q;
+      const language = languageNames[rawLanguageCode] ?? languageNames[normalizedLanguageCode] ?? rawLanguageCode.toUpperCase();
+      const downloadUrl = `https://www.subtitlecat.com${rawUrl}`;
+      const id = `${normalizedLanguageCode}-${results.length}`;
 
-      const detailUrl = `https://www.subtitlecat.com/${pageLinkMatch[1]}`;
-      const downloadsMatch = row.match(/(\d+)\s+downloads?/i);
-      const rowDownloads = downloadsMatch ? Number(downloadsMatch[1]) : 0;
-      const rowTitleMatch = row.match(/<a[^>]+href="subs\/[^"]+\.html"[^>]*>([^<]+)<\/a>/i);
-      const rowTitle = rowTitleMatch?.[1]?.trim() ?? query;
-
-      try {
-        const detailResponse = await fetch(detailUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5"
-          }
+      if (!results.some((r) => r.downloadUrl === downloadUrl)) {
+        results.push({
+          id,
+          title,
+          language,
+          languageCode: normalizedLanguageCode,
+          downloadUrl,
+          downloads: 0
         });
-        if (!detailResponse.ok) continue;
-        const detailHtml = await detailResponse.text();
-
-        const detailMatches = Array.from(
-          detailHtml.matchAll(
-            /<a[^>]+id="download_([a-z]{2}(?:-[A-Z]{2})?)"[^>]+href="([^"]+\.srt[^"]*)"[^>]*>(?:Download)?<\/a>/gi
-          )
-        );
-
-        for (const match of detailMatches) {
-          const langCode = match[1].toLowerCase();
-          const downloadUrl = match[2].startsWith("http")
-            ? match[2]
-            : `https://www.subtitlecat.com${match[2]}`;
-          const language = languageLabelFromCode(langCode);
-          const id = `${langCode}-${results.length}`;
-          if (!results.some((r) => r.downloadUrl === downloadUrl)) {
-            results.push({
-              id,
-              title: rowTitle,
-              language,
-              languageCode: langCode,
-              downloadUrl,
-              downloads: rowDownloads
-            });
-          }
-        }
-      } catch {
-        // ignore failed detail page fetches
       }
     }
 
-    return results.sort((a, b) => b.downloads - a.downloads || a.title.localeCompare(b.title)).slice(0, 30);
+    const normalizedQuery = q.toUpperCase();
+    return results
+      .filter((result) => {
+        const normalizedTitle = result.title.toUpperCase();
+        return normalizedTitle.includes(normalizedQuery) || normalizedQuery.includes(normalizedTitle);
+      })
+      .sort((left, right) => right.downloads - left.downloads || left.title.localeCompare(right.title))
+      .slice(0, 30);
+  }
+  try {
+    let results = await searchOnce(query);
+    if (results.length === 0 && query !== query.toUpperCase()) {
+      results = await searchOnce(query.toUpperCase());
+    }
+    return results;
   } catch {
     return [];
   }
 }
 
-function languageLabelFromCode(code: string): string {
-  const normalized = code.toLowerCase();
-  if (normalized === "zh-hans") return "Chinese Simplified";
-  if (normalized === "zh-hant" || normalized === "zh-tw") return "Chinese Traditional";
-  if (normalized === "zh") return "Chinese";
-  if (normalized === "en") return "English";
-  if (normalized === "ja") return "Japanese";
-  if (normalized === "ko") return "Korean";
-  if (normalized === "es") return "Spanish";
-  if (normalized === "fr") return "French";
-  if (normalized === "de") return "German";
-  if (normalized === "pt") return "Portuguese";
-  if (normalized === "ar") return "Arabic";
-  if (normalized === "ru") return "Russian";
-  if (normalized === "it") return "Italian";
-  return code.length > 0 ? code.toUpperCase() : "Unknown";
-}
-
 function registerHandlers(): void {
+    ipcMain.handle("settings:getGentleShortcut", async () => {
+      return database.getGentleShortcut();
+    });
+
+  ipcMain.handle("settings:setGentleShortcut", async (_event, shortcut: string) => {
+    database.setGentleShortcut(shortcut);
+    registerGentleUnlockShortcut();
+    return true;
+  });
+
+  ipcMain.handle("gentle:toggle", async () => {
+    toggleGentleUnlocked("button");
+    return buildShellState();
+  });
+
+  ipcMain.handle("settings:verifyGentlePin", async (_event, pin: string) => {
+    const ok = database.verifyGentlePin(pin);
+    const message = ok
+      ? "Gentle library unlocked with PIN."
+      : "Incorrect PIN.";
+
+    if (ok) {
+      gentleUnlocked = true;
+      broadcastGentleState(message);
+    }
+
+    return { ok, message };
+  });
+
+  ipcMain.handle("settings:getThemeMode", async () => {
+    return database.getThemeMode();
+  });
+
+  ipcMain.handle("settings:setThemeMode", async (_event, themeMode: "dark" | "light") => {
+    database.setThemeMode(themeMode);
+    return buildShellState();
+  });
+
   ipcMain.handle("app:getState", async () => buildShellState());
 
   ipcMain.handle("settings:saveMetadata", async (_event, settings: MetadataSettings) => {
@@ -383,9 +676,18 @@ function registerHandlers(): void {
       return emptyScanSummary();
     }
 
-    // The picked folder is the SOURCE — don't save it as a library root.
-    // Files will be moved into the configured library path (from organization settings).
-    // If no library path is configured, the source folder acts as the de-facto root.
+    const currentRoots = database.getRoots();
+    const nextRoots = {
+      ...currentRoots,
+      [targetMode]: Array.from(
+        new Set([
+          ...normalizeRootList(currentRoots[targetMode]),
+          ...result.filePaths
+        ])
+      )
+    };
+    database.setRoots(nextRoots);
+
     const rootsToScan: LibraryRoots =
       targetMode === "normal"
         ? { normal: result.filePaths, gentle: [] }
@@ -393,12 +695,16 @@ function registerHandlers(): void {
 
     activeScanToken = createCancelToken();
     try {
-      return await scanLibraries(database, rootsToScan, {
+      const summary = await scanLibraries(database, rootsToScan, {
         mode: targetMode,
         onProgress: emitScanProgress,
         scanOptions,
         cancelToken: activeScanToken
       });
+      if (!summary.cancelled) {
+        database.appendScanHistory(summary);
+      }
+      return summary;
     } finally {
       activeScanToken = null;
     }
@@ -407,12 +713,16 @@ function registerHandlers(): void {
   ipcMain.handle("movies:scan", async (_event, options?: ScanAutomationOptions) => {
     activeScanToken = createCancelToken();
     try {
-      return await scanLibraries(database, database.getRoots(), {
+      const summary = await scanLibraries(database, database.getRoots(), {
         mode: "all",
         onProgress: emitScanProgress,
         scanOptions: options ?? DEFAULT_SCAN_OPTIONS,
         cancelToken: activeScanToken
       });
+      if (!summary.cancelled) {
+        database.appendScanHistory(summary);
+      }
+      return summary;
     } finally {
       activeScanToken = null;
     }
@@ -433,7 +743,12 @@ function registerHandlers(): void {
       const roots = database.getRoots();
       database.setRoots({
         ...roots,
-        [mode]: [...roots[mode], ...result.filePaths]
+        [mode]: Array.from(
+          new Set([
+            ...normalizeRootList(roots[mode]),
+            ...result.filePaths
+          ])
+        )
       });
     }
 
@@ -479,32 +794,60 @@ function registerHandlers(): void {
     }
   );
 
-  ipcMain.handle("auth:unlockGentle", async (_event, pin: string) => {
-    if (!database.verifyGentlePin(pin)) {
-      return {
-        ok: false,
-        message: "Incorrect PIN."
-      };
+  ipcMain.handle(
+    "duplicates:resolve",
+    async (_event, keepPath: string, deletePaths: string[], gentleUnlocked?: boolean) => {
+      let deleted = 0;
+      let blocked = 0;
+      for (const p of deletePaths) {
+        try {
+          const movieId = database.findMovieIdBySourcePath(p);
+          const movie = movieId ? database.getMovie(movieId) : null;
+
+          if (movie && movie.libraryMode === "gentle" && !gentleUnlocked) {
+            blocked += 1;
+            continue;
+          }
+
+          if (movieId && movie) {
+            await deleteMovieArtifacts(movie);
+            database.deleteMovie(movieId);
+          } else if (movieId) {
+            database.deleteMovie(movieId);
+          } else {
+            await fs.unlink(p).catch(() => undefined);
+          }
+
+          deleted += 1;
+        } catch (error) {
+          // ignore individual delete errors but proceed
+          // eslint-disable-next-line no-console
+          console.error(`Failed to delete duplicate ${p}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      return { deleted, blocked };
     }
-
-    gentleUnlocked = true;
-    return {
-      ok: true,
-      message: "Gentle library unlocked for this session."
-    };
-  });
-
-  ipcMain.handle("auth:toggleGentle", async () => {
-    gentleUnlocked = !gentleUnlocked;
-    return buildShellState();
-  });
+  );
 
   ipcMain.handle("actress:getPhotos", async () => {
     return database.getAllActressPhotos();
   });
 
+  ipcMain.handle("actress:getRegions", async () => {
+    return database.getActressRegions();
+  });
+
+  ipcMain.handle("actress:getRegion", async (_event, name: string) => {
+    return database.getActressRegion(name);
+  });
+
+  ipcMain.handle("actress:listPhotos", async (_event, name: string) => {
+    return database.getActressPhotos(name);
+  });
+
   ipcMain.handle("actress:refreshPhotos", async () => {
-    const { enrichActressPhotos } = await import("../services/metadataService.js");
+    const { enrichActressPhotos } = await import("../services/metadataService");
     const allMovies = database.listMovies({ includeGentle: true, query: "" });
     const names = new Set<string>();
     for (const movie of allMovies) {
@@ -516,17 +859,54 @@ function registerHandlers(): void {
     return database.getAllActressPhotos();
   });
 
+  ipcMain.handle("actress:setPhoto", async (_event, name: string) => {
+    // Let the user pick an image file and store a file:// URL in DB
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: `Choose photo for ${name}`,
+      properties: ["openFile"],
+      filters: [
+        { name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] },
+      ],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return database.getAllActressPhotos();
+    }
+
+    const picked = result.filePaths[0];
+    const normalized = picked.replace(/\\/g, "/");
+    const url = `file:///${normalized}`;
+    database.addActressPhoto(name, url);
+    database.setActressPhoto(name, url);
+    return database.getAllActressPhotos();
+  });
+
+  ipcMain.handle("actress:setRegion", async (_event, name: string, region: string) => {
+    database.setActressRegion(name, region);
+    return database.getActressRegions();
+  });
+
+  ipcMain.handle("actress:removePhoto", async (_event, name: string, photoUrl?: string) => {
+    database.removeActressPhoto(name, photoUrl);
+    return database.getAllActressPhotos();
+  });
+
+  ipcMain.handle("actress:setPrimaryPhoto", async (_event, name: string, photoUrl: string) => {
+    database.setPrimaryActressPhoto(name, photoUrl);
+    return database.getAllActressPhotos();
+  });
+
   ipcMain.handle("player:fetchSubtitles", async (_event, dvdId: string): Promise<OnlineSubtitleResult[]> => {
     return fetchSubtitleCatResults(dvdId);
   });
 
   ipcMain.handle("player:downloadSubtitle", async (_event, url: string): Promise<string | null> => {
     try {
-      // file:// URLs must be read from disk — Node fetch() doesn't support the file: protocol
-      if (url.startsWith("file:")) {
-        const filePath = decodeURIComponent(url.replace(/^file:\/{2,3}/, "").replace(/\//g, path.sep));
-        return fs.readFileSync(filePath, "utf8");
+      if (url.startsWith("file://")) {
+        const subtitlePath = fileURLToPath(url);
+        return await fs.readFile(subtitlePath, "utf8");
       }
+
       const response = await fetch(url, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -539,6 +919,35 @@ function registerHandlers(): void {
     }
   });
 
+  ipcMain.handle(
+    "player:installSubtitle",
+    async (_event, movieId: string, language: string, content: string): Promise<string> => {
+      const movie = database.getMovie(movieId);
+      if (!movie) {
+        throw new Error("Movie not found.");
+      }
+
+      const targetPath = buildTargetSubtitlePath({
+        directory: movie.folderPath,
+        title: movie.title,
+        year: movie.year,
+        videoId: movie.videoId,
+        actresses: movie.actresses,
+        modelName: movie.videoId?.split("-")[0] ?? null,
+        language,
+        extension: ".srt",
+        subtitleCount: Math.max(movie.subtitles.length + 1, 1),
+        resolveLongPath: true,
+        organizationSettings: database.getOrganizationSettings()
+      });
+
+      await fs.mkdir(path.dirname(targetPath), { recursive: true });
+      await fs.writeFile(targetPath, content, "utf8");
+      database.upsertSubtitle(movieId, targetPath, language);
+      return targetPath;
+    }
+  );
+
   ipcMain.handle("player:getSettings", () => {
     return database.getPlayerSettings();
   });
@@ -548,252 +957,55 @@ function registerHandlers(): void {
     return settings;
   });
 
-  ipcMain.handle("player:getFileUrl", (_event, filePath: string, folderPath?: string | null): string => {
-    const resolvedPath =
-      path.isAbsolute(filePath)
-        ? filePath
-        : folderPath
-          ? path.join(folderPath, filePath)
-          : filePath;
-    const fileUrl = pathToFileURL(path.resolve(resolvedPath)).href;
-    return fileUrl.replace(/^file:/, "mla-media:");
+  ipcMain.handle("player:getPlaybackCheckpoint", (_event, movieId: string) => {
+    return database.getPlaybackCheckpoint(movieId);
   });
 
-  ipcMain.handle("player:convertToMp4", async (_event, filePath: string): Promise<{ ok: boolean; url?: string; error?: string }> => {
-    try {
-      const outputPath = buildTranscodeOutputPath(filePath);
-      if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
-        await runFfmpeg([
-          "-y",
-          "-i",
-          filePath,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "23",
-          "-pix_fmt",
-          "yuv420p",
-          "-c:a",
-          "aac",
-          "-b:a",
-          "192k",
-          outputPath
-        ]);
-      }
-      const fileUrl = pathToFileURL(outputPath).href;
-      return { ok: true, url: fileUrl.replace(/^file:/, "mla-media:") };
-    } catch (error) {
+  ipcMain.handle("player:savePlaybackCheckpoint", (_event, movieId: string, positionSeconds: number) => {
+    return database.savePlaybackCheckpoint(movieId, positionSeconds);
+  });
+
+  ipcMain.handle("player:clearPlaybackCheckpoint", (_event, movieId: string) => {
+    database.clearPlaybackCheckpoint(movieId);
+  });
+
+  ipcMain.handle("player:getFileUrl", (_event, filePath: string): string => {
+    // Convert Windows backslashes and return file:// URL for the renderer
+    const normalized = filePath.replace(/\\/g, "/");
+    return `file:///${normalized}`;
+  });
+
+  ipcMain.handle("subtitle:generateForMovie", async (_event, movieId: string, options: SubtitleGenerationOptions): Promise<SubtitleGenerationResult> => {
+    const movie = database.getMovie(movieId);
+    if (!movie) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : "Unknown conversion error"
+        message: "Movie not found.",
+        subtitlePath: null,
+        detectedLanguage: null,
+        outputLanguage: null,
+        setupRequired: false
       };
     }
-  });
 
-  ipcMain.handle("actress:setPhoto", async (_event, actressName: string): Promise<Record<string, string>> => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: `Set photo for ${actressName}`,
-      properties: ["openFile"],
-      filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }],
-    });
-    if (result.canceled || result.filePaths.length === 0) {
-      return database.getAllActressPhotos();
-    }
-    const sourcePath = result.filePaths[0];
-    const photosDir = path.join(app.getPath("userData"), "actress-photos");
-    fs.mkdirSync(photosDir, { recursive: true });
-    const ext = path.extname(sourcePath).toLowerCase() || ".jpg";
-    const safeName = actressName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-    const destPath = path.join(photosDir, `${safeName}${ext}`);
-    fs.copyFileSync(sourcePath, destPath);
-    database.setActressPhoto(actressName, `file:///${destPath.replace(/\\/g, "/")}`);
-    return database.getAllActressPhotos();
-  });
-
-  // ── Subtitle directory management ──────────────────────────────────────────
-
-  ipcMain.handle("subtitle:addDir", async (): Promise<AppShellState> => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      properties: ["openDirectory"],
-      title: "Select Subtitle Directory",
-    });
-    if (!result.canceled && result.filePaths.length > 0) {
-      const dirs = database.getSubtitleDirs();
-      const newDir = result.filePaths[0];
-      if (!dirs.includes(newDir)) {
-        database.setSubtitleDirs([...dirs, newDir]);
-      }
-    }
-    return buildShellState();
-  });
-
-  ipcMain.handle("subtitle:removeDir", (_event, dir: string): AppShellState => {
-    database.setSubtitleDirs(database.getSubtitleDirs().filter((d) => d !== dir));
-    return buildShellState();
-  });
-
-  ipcMain.handle("subtitle:scan", async (): Promise<SubtitleScanResult> => {
-    const subtitleDirs = database.getSubtitleDirs();
-    const subtitleExts = new Set([".srt", ".vtt", ".ass", ".ssa"]);
-    let total = 0, matched = 0, skipped = 0, unmatched = 0;
-
-    const walkDir = async (dir: string): Promise<string[]> => {
-      const files: string[] = [];
-      try {
-        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            files.push(...await walkDir(fullPath));
-          } else if (entry.isFile() && subtitleExts.has(path.extname(entry.name).toLowerCase())) {
-            files.push(fullPath);
-          }
-        }
-      } catch { /* skip unreadable dirs */ }
-      return files;
-    };
-
-    // Extract language tag from subtitle filename, e.g. "IPX-787.en.srt" → "en"
-    const extractLang = (subtitlePath: string): string => {
-      const base = path.basename(subtitlePath, path.extname(subtitlePath));
-      const parts = base.split(".");
-      if (parts.length >= 2) {
-        const last = parts[parts.length - 1];
-        if (/^[a-z]{2,8}(-[A-Z]{2,4})?$/.test(last)) return last;
-      }
-      return "";
-    };
-
-    for (const dir of subtitleDirs) {
-      for (const subtitlePath of await walkDir(dir)) {
-        total++;
-        const candidates = extractVideoIdCandidates(
-          path.basename(subtitlePath, path.extname(subtitlePath))
-        );
-        let didMatch = false;
-
-        for (const candidate of candidates) {
-          const hit = database.getMovieByVideoId(candidate);
-          if (!hit) continue;
-
-          const fullMovie = database.getMovie(hit.id);
-          if (!fullMovie?.sourcePath) { skipped++; didMatch = true; break; }
-
-          const lang = extractLang(subtitlePath);
-          const videoBasename = path.basename(fullMovie.sourcePath, path.extname(fullMovie.sourcePath));
-          const videoDir = path.dirname(fullMovie.sourcePath);
-          const subtitleExt = path.extname(subtitlePath).toLowerCase();
-          const newFilename = lang ? `${videoBasename}.${lang}${subtitleExt}` : `${videoBasename}${subtitleExt}`;
-          const newPath = path.join(videoDir, newFilename);
-
-          let finalPath = subtitlePath;
-          if (subtitlePath !== newPath) {
-            try {
-              await fs.promises.copyFile(subtitlePath, newPath);
-              await fs.promises.unlink(subtitlePath);
-              finalPath = newPath;
-            } catch { /* keep original path if rename fails */ }
-          }
-
-          database.upsertSubtitle(hit.id, finalPath, lang || "unknown");
-          matched++;
-          didMatch = true;
-          break;
-        }
-
-        if (!didMatch) unmatched++;
-      }
-    }
-
-    return { total, matched, skipped, unmatched };
-  });
-
-  ipcMain.handle("movies:addFiles", async (): Promise<{ added: number; skipped: number }> => {
-    const VIDEO_EXTS = VIDEO_EXTENSIONS.map((ext) => ext.slice(1)); // strip leading dot for dialog filter
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: "Add video files to library",
-      properties: ["openFile", "multiSelections"],
-      filters: [{ name: "Video Files", extensions: VIDEO_EXTS }],
-    });
-
-    if (result.canceled || result.filePaths.length === 0) {
-      return { added: 0, skipped: 0 };
-    }
-
-    return registerLocalFiles(database, result.filePaths);
-  });
-
-  ipcMain.handle("duplicates:resolve", async (_event, keepPath: string, deletePaths: string[], gentleUnlockedArg?: boolean): Promise<{ deleted: number; blocked: number }> => {
-    const gentleRoots = database.getRoots().gentle.map((r) => r.replace(/\\/g, "/"));
-    const isGentleFile = (p: string) => {
-      const normalized = p.replace(/\\/g, "/");
-      return gentleRoots.some((root) => normalized.startsWith(root));
-    };
-
-    let deleted = 0;
-    let blocked = 0;
-
-    for (const deletePath of deletePaths) {
-      // Block physical deletion of gentle-library files when gentle is locked
-      const gentle = isGentleFile(deletePath);
-      if (gentle && !gentleUnlocked && !gentleUnlockedArg) {
-        // Still remove DB record if present, but do NOT delete the file
-        const movieId = database.findMovieIdBySourcePath(deletePath);
-        if (movieId) database.deleteMovie(movieId);
-        blocked += 1;
-        continue;
-      }
-
-      const movieId = database.findMovieIdBySourcePath(deletePath);
-      if (movieId) database.deleteMovie(movieId);
-
-      try {
-        await fs.promises.unlink(deletePath);
-        deleted += 1;
-      } catch { /* already gone or locked */ }
-    }
-
-    return { deleted, blocked };
+    return runSubtitleGeneration(movie, options);
   });
 }
 
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 app.commandLine.appendSwitch("disable-http-cache");
 
+const userDataOverride = process.env.MLA_USER_DATA_DIR?.trim();
+if (userDataOverride) {
+  app.setPath("userData", path.resolve(userDataOverride));
+}
+
 app.whenReady().then(() => {
+
   const databasePath = path.join(app.getPath("userData"), "mla-plus.db");
   database = new DatabaseClient(databasePath);
-  protocol.registerFileProtocol("mla-media", (request, callback) => {
-    try {
-      const parsed = new URL(request.url);
-      let filePath: string;
-
-      if (process.platform === "win32" && /^[a-z]$/i.test(parsed.hostname)) {
-        const drive = `${parsed.hostname.toUpperCase()}:`;
-        const normalizedPath = decodeURIComponent(parsed.pathname).replace(/\//g, path.sep);
-        filePath = path.normalize(`${drive}${normalizedPath}`);
-      } else if (process.platform === "win32" && /^\/[a-z]:/i.test(parsed.pathname)) {
-        filePath = path.normalize(decodeURIComponent(parsed.pathname.slice(1)).replace(/\//g, path.sep));
-      } else {
-        const fileUrl = request.url.replace(/^mla-media:/, "file:");
-        filePath = fileURLToPath(fileUrl);
-      }
-
-      callback({ path: filePath });
-    } catch {
-      callback({ error: -6 });
-    }
-  });
   registerHandlers();
   createWindow();
-
-  // Register global shortcut for Ctrl+Shift+D → toggle gentle mode
-  globalShortcut.register("CommandOrControl+Shift+D", () => {
-    gentleUnlocked = !gentleUnlocked;
-    mainWindow?.webContents.send("gentle:toggled", buildShellState());
-  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -803,7 +1015,6 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  globalShortcut.unregisterAll();
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -811,4 +1022,8 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   database?.close();
+  if (registeredGentleShortcut) {
+    globalShortcut.unregister(registeredGentleShortcut);
+    registeredGentleShortcut = null;
+  }
 });
