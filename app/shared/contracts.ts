@@ -30,9 +30,9 @@ export interface SubtitleGenerationOptions {
   language: SubtitleGenerationLanguage;
   model: SubtitleGenerationModel;
   outputMode: SubtitleGenerationOutputMode;
-  customFileName?: string;
-  prompt?: string;
-}
+   customFileName?: string;
+   prompt?: string;
+ }
 
 export interface SubtitleGenerationResult {
   ok: boolean;

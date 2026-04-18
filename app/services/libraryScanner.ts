@@ -326,10 +326,16 @@ export async function scanLibraries(
           reason: validation.reason,
           status: validation.status
         });
+<<<<<<< HEAD
         const errorMsg = `${candidate.mode}:${candidate.videoFile} - ${validation.reason}`;
         errors.push(errorMsg);
         // eslint-disable-next-line no-console
         console.log(`[scanner] VALIDATION REJECTED: ${errorMsg}`);
+=======
+        errors.push(
+          `${candidate.mode}:${candidate.videoFile} - ${validation.reason}`
+        );
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
         processedFiles += 1;
         continue;
       }
@@ -467,11 +473,24 @@ async function walkForVideos(
   rejectedFiles: ScanRejectedFile[],
   onWarning?: (warning: string) => void
 ): Promise<string[]> {
+<<<<<<< HEAD
+=======
+  let entries;
+  try {
+    entries = await fs.readdir(root, {
+      withFileTypes: true
+    });
+  } catch (error) {
+    onWarning?.(`${root} - ${formatError(error)}`);
+    return [];
+  }
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
   const videoFiles: string[] = [];
   const normalizeKey = (directory: string) => path.resolve(directory).toLowerCase();
   const pendingDirs: string[] = [root];
   const visitedDirs = new Set<string>();
 
+<<<<<<< HEAD
   while (pendingDirs.length > 0) {
     const currentDir = pendingDirs.pop()!;
     let realCurrentDir = currentDir;
@@ -526,6 +545,29 @@ async function walkForVideos(
           reason: `Unsupported video format "${extension}".`
         });
       }
+=======
+  for (const entry of entries) {
+    const resolved = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      if (recursive) {
+        videoFiles.push(...(await walkForVideos(resolved, true, rejectedFiles, onWarning)));
+      }
+      continue;
+    }
+
+    const extension = path.extname(entry.name).toLowerCase();
+    if (VIDEO_EXTENSIONS.includes(extension as (typeof VIDEO_EXTENSIONS)[number])) {
+      videoFiles.push(resolved);
+      continue;
+    }
+
+    if (KNOWN_VIDEO_EXTENSIONS.includes(extension as (typeof KNOWN_VIDEO_EXTENSIONS)[number])) {
+      rejectedFiles.push({
+        path: resolved,
+        status: "unsupported",
+        reason: `Unsupported video format "${extension}".`
+      });
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
     }
   }
 

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { useEffect, useRef, useState } from "react";
+=======
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
 import type React from "react";
 import type { LibraryMode, MovieRecord } from "../../../shared/contracts";
 import { MovieTile } from "./MovieTile";
@@ -64,9 +68,12 @@ export function LibraryPage({
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const scanMenuRef = useRef<HTMLDivElement | null>(null);
   const [showScanMenu, setShowScanMenu] = useState(false);
+<<<<<<< HEAD
   const visibleMissingPosterIds = sortedMovies
     .filter((movie) => !movie.posterUrl)
     .map((movie) => movie.id);
+=======
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
 
   useEffect(() => {
     if (movies.length >= movieTotalCount) {
@@ -115,6 +122,7 @@ export function LibraryPage({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [showScanMenu]);
 
+<<<<<<< HEAD
   useEffect(() => {
     const gridElement = gridRef.current;
     if (!gridElement) {
@@ -124,6 +132,8 @@ export function LibraryPage({
     gridElement.style.setProperty("--cols", String(gridColumns));
   }, [gridColumns, gridRef]);
 
+=======
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
   return (
     <section className="page library-page">
       <div className="library-shell">
@@ -142,7 +152,10 @@ export function LibraryPage({
               <div className="columns-control">
                 <span>Sort</span>
                 <select
+<<<<<<< HEAD
                   aria-label="Sort movies"
+=======
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
                   className="filter-select"
                   value={sortMode}
                   onChange={(e) => setSortMode(e.target.value as SortMode)}
@@ -231,6 +244,7 @@ export function LibraryPage({
               </button>
               <button
                 className="ghost-button"
+<<<<<<< HEAD
                 disabled={isScanning || visibleMissingPosterIds.length === 0}
                 onClick={() => void handleRefreshSelectedPosters(visibleMissingPosterIds)}
                 type="button"
@@ -240,6 +254,8 @@ export function LibraryPage({
               </button>
               <button
                 className="ghost-button"
+=======
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
                 onClick={() => void handleBatchMove("normal")}
                 type="button"
               >
@@ -261,6 +277,10 @@ export function LibraryPage({
             className="movie-grid"
             onMouseDown={handleGridMouseDown}
             ref={gridRef}
+<<<<<<< HEAD
+=======
+            style={{ "--cols": gridColumns } as CSSProperties}
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
           >
             {sortedMovies.map((movie) => (
               <MovieTile

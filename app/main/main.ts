@@ -93,6 +93,7 @@ async function deleteMovieArtifacts(movie: MovieRecord): Promise<void> {
   await cleanupDirectoryIfEmpty(movie.folderPath);
 }
 
+<<<<<<< HEAD
 function toFileUrl(filePath: string): string {
   const normalized = path.resolve(filePath).replace(/\\/g, "/");
   return `file:///${normalized}`;
@@ -212,6 +213,8 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
   }
 }
 
+=======
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
 function broadcastGentleState(message: string): void {
   mainWindow?.show();
   mainWindow?.focus();
@@ -257,6 +260,45 @@ function createWindow(): void {
       );
     }
   );
+
+  // Forward renderer console messages to the main process terminal for debugging
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    const levelName = level === 0 ? "LOG" : level === 1 ? "WARNING" : level === 2 ? "ERROR" : `LVL${level}`;
+    writeTerminalLine(`[renderer:${levelName}] ${message} (${sourceId}:${line})`);
+  });
+
+  // Also log unhandled renderer crashes
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    writeTerminalLine(
+      `[renderer:CRASH] Reason=${details.reason} exitCode=${details.exitCode}`,
+      process.stderr
+    );
+  });
+
+  // Register gentle mode unlock shortcut after window is ready
+  mainWindow.once("ready-to-show", () => {
+    registerGentleUnlockShortcut();
+  });
+}
+function registerGentleUnlockShortcut() {
+  if (!mainWindow) return;
+  // Unregister previous shortcut if any
+  if (registeredGentleShortcut) {
+    globalShortcut.unregister(registeredGentleShortcut);
+    registeredGentleShortcut = null;
+  }
+  const shortcut = database.getGentleShortcut().trim() || "Ctrl+Alt+D";
+  if (shortcut && shortcut.length > 0) {
+    const ok = globalShortcut.register(shortcut, async () => {
+      const now = Date.now();
+      if (now - lastGentleToggleAt < 350) {
+        return;
+      }
+      lastGentleToggleAt = now;
+      toggleGentleUnlocked("shortcut");
+    });
+    if (ok) registeredGentleShortcut = shortcut;
+  }
 
   // Forward renderer console messages to the main process terminal for debugging
   mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
@@ -392,6 +434,7 @@ function sanitizeSubtitleFileName(value: string): string {
   return sanitized || "subtitle";
 }
 
+<<<<<<< HEAD
 const SUBTITLE_FILE_EXTENSIONS = new Set([".srt", ".vtt", ".ass", ".ssa"]);
 
 function extractSubtitleLanguageFromName(filePath: string): string {
@@ -460,6 +503,8 @@ async function walkSubtitleFiles(root: string): Promise<string[]> {
   return files;
 }
 
+=======
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
 async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenerationOptions): Promise<SubtitleGenerationResult> {
   const scriptPath = resolveSubGenScriptPath();
   try {
@@ -502,6 +547,7 @@ async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenera
         ? path.join(movie.folderPath, `${sanitizeSubtitleFileName(options.customFileName ?? "")}.srt`)
       : targetPath;
 
+<<<<<<< HEAD
    const args = [scriptPath, "--input", movie.sourcePath, "--output", finalTargetPath, "--model", options.model];
    if (options.language === "translate-en") {
      args.push("--translate-to", "en");
@@ -513,6 +559,16 @@ async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenera
    if (options.prompt) {
      args.push("--prompt", options.prompt);
    }
+=======
+  const args = [scriptPath, "--input", movie.sourcePath, "--output", finalTargetPath, "--model", options.model];
+  if (options.language === "translate-en") {
+    args.push("--translate-to", "en");
+  } else if (options.language === "translate-zh") {
+    args.push("--translate-to", "zh");
+  } else if (options.language === "translate-km") {
+    args.push("--translate-to", "km");
+  }
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
 
   return new Promise<SubtitleGenerationResult>((resolve) => {
     const child = spawn("python", args, {
@@ -1160,6 +1216,7 @@ function registerHandlers(): void {
   ipcMain.handle("player:savePlaybackCheckpoint", (_event, movieId: string, positionSeconds: number) => {
     return database.savePlaybackCheckpoint(movieId, positionSeconds);
   });
+<<<<<<< HEAD
 
   ipcMain.handle("player:clearPlaybackCheckpoint", (_event, movieId: string) => {
     database.clearPlaybackCheckpoint(movieId);
@@ -1258,6 +1315,32 @@ function registerHandlers(): void {
       };
     }
 
+=======
+
+  ipcMain.handle("player:clearPlaybackCheckpoint", (_event, movieId: string) => {
+    database.clearPlaybackCheckpoint(movieId);
+  });
+
+  ipcMain.handle("player:getFileUrl", (_event, filePath: string): string => {
+    // Convert Windows backslashes and return file:// URL for the renderer
+    const normalized = filePath.replace(/\\/g, "/");
+    return `file:///${normalized}`;
+  });
+
+  ipcMain.handle("subtitle:generateForMovie", async (_event, movieId: string, options: SubtitleGenerationOptions): Promise<SubtitleGenerationResult> => {
+    const movie = database.getMovie(movieId);
+    if (!movie) {
+      return {
+        ok: false,
+        message: "Movie not found.",
+        subtitlePath: null,
+        detectedLanguage: null,
+        outputLanguage: null,
+        setupRequired: false
+      };
+    }
+
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
     return runSubtitleGeneration(movie, options);
   });
 }
@@ -1275,6 +1358,16 @@ if (userDataOverride && app) {
 if (app) {
   app.whenReady().then(() => {
 
+<<<<<<< HEAD
+=======
+const userDataOverride = process.env.MLA_USER_DATA_DIR?.trim();
+if (userDataOverride) {
+  app.setPath("userData", path.resolve(userDataOverride));
+}
+
+app.whenReady().then(() => {
+
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
   const databasePath = path.join(app.getPath("userData"), "mla-plus.db");
   database = new DatabaseClient(databasePath);
   registerHandlers();
@@ -1288,6 +1381,7 @@ if (app) {
 });
 }
 
+<<<<<<< HEAD
 if (app) {
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {
@@ -1303,3 +1397,18 @@ if (app) {
     }
   });
 }
+=======
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+
+app.on("before-quit", () => {
+  database?.close();
+  if (registeredGentleShortcut) {
+    globalShortcut.unregister(registeredGentleShortcut);
+    registeredGentleShortcut = null;
+  }
+});
+>>>>>>> 995192b (Update library UI and harden scan timeouts)
