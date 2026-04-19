@@ -190,145 +190,156 @@ export function LibraryPage({
                 )}
               </h3>
             </div>
-            <div className="inline-actions">
-              <div className="columns-control">
-                <span>Sort</span>
-                <select
-                  className="filter-select"
-                  value={sortMode}
-                  onChange={(e) => setSortMode(e.target.value as SortMode)}
-                >
-                  <option value="actress">1. Actress A–Z</option>
-                  <option value="studio">2. Studio</option>
-                  <option value="tag">3. Tag</option>
-                  <option value="import-date">4. Import Date</option>
-                  <option value="dvd-id">5. DVD ID</option>
-                  <option value="actress-age">6. Actress Age</option>
-                  <option value="recent-add">7. Recent Add</option>
-                  <option value="oldest">8. Oldest</option>
-                  <option value="newest">9. Newest</option>
-                </select>
+            <div className="inline-actions library-toolbar">
+              <div className="toolbar-group">
+                <span className="toolbar-group-label">View</span>
+                <div className="columns-control">
+                  <span>Sort</span>
+                  <select
+                    className="filter-select"
+                    value={sortMode}
+                    onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  >
+                    <option value="actress">1. Actress A–Z</option>
+                    <option value="studio">2. Studio</option>
+                    <option value="tag">3. Tag</option>
+                    <option value="import-date">4. Import Date</option>
+                    <option value="dvd-id">5. DVD ID</option>
+                    <option value="actress-age">6. Actress Age</option>
+                    <option value="recent-add">7. Recent Add</option>
+                    <option value="oldest">8. Oldest</option>
+                    <option value="newest">9. Newest</option>
+                  </select>
+                </div>
+                <div className="zoom-control">
+                  <button
+                    className="zoom-btn"
+                    disabled={gridColumns <= 4}
+                    onClick={() => changeGridColumns(gridColumns - 1)}
+                    title="Zoom in"
+                    type="button"
+                  >
+                    +
+                  </button>
+                  <span className="zoom-pct">{Math.round(600 / gridColumns)}%</span>
+                  <button
+                    className="zoom-btn"
+                    disabled={gridColumns >= 8}
+                    onClick={() => changeGridColumns(gridColumns + 1)}
+                    title="Zoom out"
+                    type="button"
+                  >
+                    −
+                  </button>
+                </div>
+                <div className="scan-popup-anchor" ref={fieldsMenuRef}>
+                  <button
+                    className="secondary-button"
+                    onClick={() => setShowFieldsMenu((current) => !current)}
+                    type="button"
+                  >
+                    Movie fields
+                  </button>
+                  {showFieldsMenu && (
+                    <div className="scan-mode-popup fields-popup">
+                      <div className="fields-popup-header">
+                        <span className="fields-popup-title">Show on cards</span>
+                        <button
+                          className="fields-popup-reset"
+                          onClick={() => setTileDisplayFields(DEFAULT_TILE_FIELDS)}
+                          type="button"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                      <div className="fields-popup-grid">
+                        {DISPLAY_FIELD_OPTIONS.map((option) => (
+                          <label className="fields-popup-item" key={option.id}>
+                            <input
+                              type="checkbox"
+                              checked={tileDisplayFields.includes(option.id)}
+                              onChange={() => toggleField(option.id)}
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="zoom-control">
-                <button
-                  className="zoom-btn"
-                  disabled={gridColumns <= 4}
-                  onClick={() => changeGridColumns(gridColumns - 1)}
-                  title="Zoom in"
-                  type="button"
-                >
-                  +
-                </button>
-                <span className="zoom-pct">{Math.round(600 / gridColumns)}%</span>
-                <button
-                  className="zoom-btn"
-                  disabled={gridColumns >= 8}
-                  onClick={() => changeGridColumns(gridColumns + 1)}
-                  title="Zoom out"
-                  type="button"
-                >
-                  −
-                </button>
-              </div>
-              <div className="scan-popup-anchor" ref={scanMenuRef}>
-                <button
-                  className="secondary-button"
-                  disabled={isScanning}
-                  onClick={() => setShowScanMenu((current) => !current)}
-                  type="button"
-                >
-                  Scan library
-                </button>
-                {showScanMenu && (
-                  <div className="scan-mode-popup">
-                    <button
-                      className="scan-mode-popup-item"
-                      onClick={() => {
-                        setShowScanMenu(false);
-                        openScanOptions("normal");
-                      }}
-                      type="button"
-                    >
-                      Scan normal media folder
-                    </button>
-                    <button
-                      className="scan-mode-popup-item"
-                      onClick={() => {
-                        setShowScanMenu(false);
-                        openScanOptions("gentle");
-                      }}
-                      type="button"
-                    >
-                      Scan gentle media folder
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="scan-popup-anchor" ref={fieldsMenuRef}>
-                <button
-                  className="secondary-button"
-                  onClick={() => setShowFieldsMenu((current) => !current)}
-                  type="button"
-                >
-                  Movie fields
-                </button>
-                {showFieldsMenu && (
-                  <div className="scan-mode-popup fields-popup">
-                    <div className="fields-popup-header">
-                      <span className="fields-popup-title">Show on cards</span>
+
+              <div className="toolbar-group">
+                <span className="toolbar-group-label">Scan</span>
+                <div className="scan-popup-anchor" ref={scanMenuRef}>
+                  <button
+                    className="secondary-button"
+                    disabled={isScanning}
+                    onClick={() => setShowScanMenu((current) => !current)}
+                    type="button"
+                  >
+                    Scan library
+                  </button>
+                  {showScanMenu && (
+                    <div className="scan-mode-popup">
                       <button
-                        className="fields-popup-reset"
-                        onClick={() => setTileDisplayFields(DEFAULT_TILE_FIELDS)}
+                        className="scan-mode-popup-item"
+                        onClick={() => {
+                          setShowScanMenu(false);
+                          openScanOptions("normal");
+                        }}
                         type="button"
                       >
-                        Reset
+                        Scan normal media folder
+                      </button>
+                      <button
+                        className="scan-mode-popup-item"
+                        onClick={() => {
+                          setShowScanMenu(false);
+                          openScanOptions("gentle");
+                        }}
+                        type="button"
+                      >
+                        Scan gentle media folder
                       </button>
                     </div>
-                    <div className="fields-popup-grid">
-                      {DISPLAY_FIELD_OPTIONS.map((option) => (
-                        <label className="fields-popup-item" key={option.id}>
-                          <input
-                            type="checkbox"
-                            checked={tileDisplayFields.includes(option.id)}
-                            onChange={() => toggleField(option.id)}
-                          />
-                          <span>{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-              <button
-                className="ghost-button"
-                disabled={isScanning}
-                onClick={selectMissingPosterTitles}
-                type="button"
-              >
-                Select missing posters
-              </button>
-              <button
-                className="ghost-button"
-                disabled={isScanning || selectedIdSet.size === 0}
-                onClick={() => void handleRefreshSelectedPosters()}
-                type="button"
-              >
-                Regenerate selected posters
-              </button>
-              <button
-                className="ghost-button"
-                onClick={() => void handleBatchMove("normal")}
-                type="button"
-              >
-                Move selected to normal
-              </button>
-              <button
-                className="ghost-button"
-                onClick={() => void handleBatchMove("gentle")}
-                type="button"
-              >
-                Move selected to gentle
-              </button>
+
+              <div className="toolbar-group">
+                <span className="toolbar-group-label">Manual</span>
+                <button
+                  className="ghost-button"
+                  disabled={isScanning}
+                  onClick={selectMissingPosterTitles}
+                  type="button"
+                >
+                  Select missing posters
+                </button>
+                <button
+                  className="ghost-button"
+                  disabled={isScanning || selectedIdSet.size === 0}
+                  onClick={() => void handleRefreshSelectedPosters()}
+                  type="button"
+                >
+                  Regenerate selected posters
+                </button>
+                <button
+                  className="ghost-button"
+                  onClick={() => void handleBatchMove("normal")}
+                  type="button"
+                >
+                  Move selected to normal
+                </button>
+                <button
+                  className="ghost-button"
+                  onClick={() => void handleBatchMove("gentle")}
+                  type="button"
+                >
+                  Move selected to gentle
+                </button>
+              </div>
             </div>
           </div>
         </div>

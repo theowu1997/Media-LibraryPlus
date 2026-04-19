@@ -1044,6 +1044,33 @@ code {
   align-items: center;
 }
 
+.library-page .library-toolbar {
+  flex-wrap: wrap;
+}
+
+.library-page .toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+html[data-theme="light"] .library-page .toolbar-group {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.library-page .toolbar-group-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-right: 0.25rem;
+}
+
 .library-page .columns-control,
 .settings-page .columns-control,
 .player-topbar-actions .ghost-button,

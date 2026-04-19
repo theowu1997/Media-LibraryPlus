@@ -160,7 +160,7 @@ export function deriveRegionLabel(
   const rules: Array<[string, RegExp[]]> = [
     ["Japan", [/\bjapan(?:ese)?\b/i, /\bjav\b/i, /\bjp\b/i]],
     ["China", [/\bchina(?:ese)?\b/i, /\bcn\b/i, /\bmandarin\b/i]],
-    ["United States", [/\bamerica(?:n)?\b/i, /\busa\b/i, /\bus\b/i, /\benglish\b/i]],
+    ["America", [/\bamerica(?:n)?\b/i, /\busa\b/i, /\bus\b/i, /\benglish\b/i]],
     ["Spain", [/\bspain(?:ish)?\b/i, /\bes\b/i, /\bespa(?:ña|na)\b/i]],
     ["Korea", [/\bkorea(?:n)?\b/i, /\bkr\b/i]],
     ["France", [/\bfrance(?:se|es)?\b/i, /\bfr\b/i]],
