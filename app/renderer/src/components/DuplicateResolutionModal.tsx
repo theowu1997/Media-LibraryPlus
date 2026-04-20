@@ -19,7 +19,7 @@ export function DuplicateResolutionModal({
 }: DuplicateResolutionModalProps) {
   return (
     <div className="dup-modal-overlay">
-      <div className="dup-modal">
+      <div className="dup-modal" aria-label="Duplicate resolution dialog" tabIndex={0}>
         <div className="dup-modal-header">
           <div>
             <p className="eyebrow">Duplicates found</p>

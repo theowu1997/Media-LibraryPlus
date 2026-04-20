@@ -178,12 +178,15 @@ export function ScanOptionsDialog({
             </label>
             <label className="toggle-field">
               <span>Preferred SubtitleCat language</span>
+              <label htmlFor="subtitle-language-select" className="visually-hidden">Preferred SubtitleCat language</label>
               <select
+                id="subtitle-language-select"
                 value={scanOptionsDraft.preferredSubtitleLanguage}
                 onChange={(e) =>
                   onChangeScanOption("preferredSubtitleLanguage", e.target.value as ScanAutomationOptions["preferredSubtitleLanguage"])
                 }
                 disabled={!scanOptionsDraft.autoDownloadSubtitleFromSubtitleCat || scanOptionsDraft.fastScan}
+                aria-label="Preferred SubtitleCat language"
               >
                 <option value="zh-hans">Chinese Simplified</option>
                 <option value="zh-hant">Chinese Traditional</option>

@@ -82,7 +82,25 @@ export function AppTopBar({
         </section>
       )}
 
-      {null}
+      {/* Improved scan summary/results separation */}
+      {lastScanSummaryInvalidFiles.length > 0 && (
+        <section className="panel scan-report-panel" aria-label="Scan invalid files summary" tabIndex={0}>
+          <div className="scan-report-section">
+            <p className="scan-section-label">❌ Blocked/Invalid Files</p>
+            <div className="scan-report-grid">
+              {lastScanSummaryInvalidFiles.map((item) => (
+                <article className="report-item" key={`${item.path}:${item.reason}`}>
+                  <span className={`report-pill ${item.status}`}>
+                    {rejectedLabel(item.status as "incomplete" | "corrupt" | "invalid" | "unsupported")}
+                  </span>
+                  <strong className="report-reason">{item.reason}</strong>
+                  <code>{item.path}</code>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
     </>
   );
 }

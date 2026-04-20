@@ -1,4 +1,22 @@
-# Git repair (Windows worktree path break)
+
+# Git Repair (Windows Worktree Path Break)
+
+**Summary:**
+This guide helps you fix broken Git worktree pointers, a common issue when using Git worktrees on Windows and the main repository is moved, renamed, or deleted. Use this if you see errors about missing `.git/worktrees` or invalid gitdir pointers.
+
+---
+
+## Troubleshooting Checklist
+
+- [ ] Are you using a Git worktree checkout?
+- [ ] Did you move, rename, or delete the main repository?
+- [ ] Does `.git` in your worktree folder contain a `gitdir:` pointer?
+- [ ] Does `git status` fail with a `.git/worktrees` error?
+- [ ] Do you still have access to the original main repository?
+
+If you answered yes to the above, follow the steps below.
+
+---
 
 ## Symptom
 
@@ -24,6 +42,7 @@ gitdir: C:/path/to/main-repo/.git/worktrees/<worktree-name>
 
 If the main repo folder is renamed/moved/deleted, the pointer becomes invalid and Git commands stop working in the worktree.
 
+
 > The `+` in the folder name is not the issue — the missing/changed main-repo path is.
 
 ## Fix option A (quick): detach and re-init (loses old history)
@@ -48,6 +67,7 @@ git status
 
 should work normally.
 
+
 ## Fix option B (preferred): restore worktree linkage (keeps history)
 
 Use this if you still have the original main repository (the one that contains the real `.git` directory).
@@ -62,4 +82,11 @@ git worktree repair
 ```
 
 If the main repo is gone, use Fix option A.
+
+---
+
+## More Resources
+
+- [Git Worktree Documentation](https://git-scm.com/docs/git-worktree)
+- [Git Worktree Troubleshooting](https://github.com/git/git/blob/master/Documentation/git-worktree.txt)
 

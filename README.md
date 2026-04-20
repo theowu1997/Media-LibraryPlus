@@ -16,6 +16,10 @@ MediaLibrary Plus is a Windows desktop app for organizing and browsing local vid
 
 ## Main screens
 
+![Build](https://img.shields.io/badge/build-passing-brightgreen)
+![Platform](https://img.shields.io/badge/platform-Windows-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 ### Home
 
 - Start scans for Normal Mode or Gentle Mode
@@ -127,12 +131,35 @@ npm run dev
 
 ## Scripts
 
-- `npm run dev` - start the Electron development flow
-- `npm run build` - type-check and build the app
-- `npm start` - launch the packaged Electron app
-- `npm test` - run the Vitest unit suite
-- `npm run test:e2e` - run the Playwright end-to-end suite
+ - `npm run dev` – Start the Electron development flow
+ - `npm run build` – Type-check and build the app
+ - `npm start` – Launch the packaged Electron app
+ - `npm test` – Run the Vitest unit suite
+ - `npm run test:e2e` – Run the Playwright end-to-end suite
 
+## Troubleshooting
+
+- If Git commands fail with a worktree path error, see [docs/git-repair.md](docs/git-repair.md).
+- For native module errors (e.g., better-sqlite3), run `npm run rebuild:electron`.
+
+## Contributing
+
+Contributions are welcome! Please open issues or pull requests for bug fixes, features, or documentation improvements.
+
+1. Fork the repo and create a feature branch.
+2. Make your changes and add tests if applicable.
+3. Run `npm test` to ensure all tests pass.
+4. Submit a pull request with a clear description.
+
+---
+
+## Notes
+
+- MLA+ is Windows-first and uses Electron, React, Vite, and better-sqlite3.
+- The local database is stored in the Electron user-data directory.
+- Metadata and poster fetching rely on online services and may fail if those services are unavailable.
+- TMDB usage is intended for free non-commercial projects with attribution.
+- Some UI features may be partial or roadmap-only.
 ## Git troubleshooting
 
 If Git commands fail with a worktree path error (broken `.git` pointer), see `docs/git-repair.md`.

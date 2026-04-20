@@ -270,10 +270,13 @@ export function ActressesPage({
           <div className="actress-zoom-bar">
             <div className="columns-control">
               <span>Sort</span>
+              <label htmlFor="actress-sort-select" className="visually-hidden">Sort performers</label>
               <select
+                id="actress-sort-select"
                 className="filter-select"
                 value={actressSortMode}
                 onChange={(e) => setActressSortMode(e.target.value as "count" | "studio" | "tag")}
+                aria-label="Sort performers"
               >
                 <option value="count">1. Most titles</option>
                 <option value="studio">2. Studio</option>

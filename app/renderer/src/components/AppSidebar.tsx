@@ -44,7 +44,8 @@ export const AppSidebar = memo(function AppSidebar({
       <aside
         className={`${collapsed ? "sidebar collapsed" : "sidebar"} ${styles.dynamicWidth}`}
         style={{ '--sidebarWidth': `${width}px` } as React.CSSProperties}
-
+        aria-label="Main navigation sidebar"
+        tabIndex={0}
       >
         <button
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
