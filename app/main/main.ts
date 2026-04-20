@@ -8,12 +8,15 @@ import { moveMovieToMode } from "../services/fileService";
 import { buildTargetNfoPath, buildTargetSubtitlePath } from "../services/libraryLayout";
 import { DEFAULT_SCAN_OPTIONS, scanLibraries, createCancelToken, type CancelToken } from "../services/libraryScanner";
 import { enrichMoviePoster } from "../services/metadataService";
+import { SUBTITLE_EXTENSIONS } from "../shared/contracts";
+import { extractVideoIdCandidates } from "../shared/videoId";
 import type {
   AppShellState,
   MetadataSettings,
   LibraryMode,
   LibraryRoots,
   MovieRecord,
+  MoveProgress,
   OnlineSubtitleResult,
   OrganizationSettings,
   PlayerSettings,
@@ -190,6 +193,10 @@ function buildShellState(): AppShellState {
 
 function emitScanProgress(progress: ScanProgress): void {
   mainWindow?.webContents.send("scan:progress", progress);
+}
+
+function emitMoveProgress(progress: MoveProgress): void {
+  mainWindow?.webContents.send("move:progress", progress);
 }
 
 function emptyScanSummary(scannedRoots?: LibraryRoots): ScanSummary {
@@ -515,6 +522,78 @@ async function backfillMoviePosters(
   return summary;
 }
 
+async function collectSubtitleFiles(directory: string): Promise<string[]> {
+  const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
+  const subtitleFiles: string[] = [];
+
+  for (const entry of entries) {
+    const resolved = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      subtitleFiles.push(...(await collectSubtitleFiles(resolved)));
+      continue;
+    }
+
+    if (
+      entry.isFile() &&
+      SUBTITLE_EXTENSIONS.includes(path.extname(entry.name).toLowerCase() as (typeof SUBTITLE_EXTENSIONS)[number])
+    ) {
+      subtitleFiles.push(resolved);
+    }
+  }
+
+  return subtitleFiles;
+}
+
+function findMovieForSubtitle(subtitlePath: string): { id: string; title: string } | null {
+  const subtitleName = path.basename(subtitlePath, path.extname(subtitlePath));
+  for (const candidate of extractVideoIdCandidates(subtitleName)) {
+    const movie = database.getMovieByVideoId(candidate);
+    if (movie) {
+      return movie;
+    }
+  }
+
+  return null;
+}
+
+async function scanSubtitleDirectories(): Promise<{
+  total: number;
+  matched: number;
+  skipped: number;
+  unmatched: number;
+}> {
+  const subtitleDirs = database.getSubtitleDirs();
+  let total = 0;
+  let matched = 0;
+  let skipped = 0;
+  let unmatched = 0;
+
+  for (const subtitleDir of subtitleDirs) {
+    const subtitleFiles = await collectSubtitleFiles(subtitleDir);
+    total += subtitleFiles.length;
+
+    for (const subtitleFile of subtitleFiles) {
+      const movie = findMovieForSubtitle(subtitleFile);
+      if (!movie) {
+        unmatched += 1;
+        continue;
+      }
+
+      const alreadyLinked =
+        database.getMovie(movie.id)?.subtitles.some((subtitle) => subtitle.path === subtitleFile) ?? false;
+      database.upsertSubtitle(movie.id, subtitleFile, "und");
+
+      if (alreadyLinked) {
+        skipped += 1;
+      } else {
+        matched += 1;
+      }
+    }
+  }
+
+  return { total, matched, skipped, unmatched };
+}
+
 async function fetchSubtitleCatResults(query: string): Promise<OnlineSubtitleResult[]> {
   async function searchOnce(q: string): Promise<OnlineSubtitleResult[]> {
     const url = `https://www.subtitlecat.com/index.php?search=${encodeURIComponent(q)}`;
@@ -806,6 +885,33 @@ function registerHandlers(): void {
     return result.filePaths[0];
   });
 
+  ipcMain.handle("subtitle:addDir", async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: "Choose subtitle folder",
+      properties: ["openDirectory", "createDirectory"]
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      database.setSubtitleDirs([
+        ...database.getSubtitleDirs(),
+        ...result.filePaths
+      ]);
+    }
+
+    return buildShellState();
+  });
+
+  ipcMain.handle("subtitle:removeDir", async (_event, dir: string) => {
+    database.setSubtitleDirs(
+      database.getSubtitleDirs().filter((entry) => entry !== dir)
+    );
+    return buildShellState();
+  });
+
+  ipcMain.handle("subtitle:scan", async () => {
+    return scanSubtitleDirectories();
+  });
+
   ipcMain.handle("shell:openFile", async (_event, filePath: string) => {
     await shell.openPath(filePath);
   });
@@ -817,7 +923,48 @@ function registerHandlers(): void {
   ipcMain.handle(
     "movies:moveMode",
     async (_event, movieId: string, mode: LibraryMode) => {
-      return moveMovieToMode(database, movieId, mode);
+      emitMoveProgress({
+        stage: "starting",
+        targetMode: mode,
+        totalMovies: 1,
+        completedMovies: 0,
+        currentMovieId: movieId,
+        message: "Starting move..."
+      });
+      try {
+        const moved = await moveMovieToMode(database, movieId, mode, {
+          onProgress: (update) => {
+            emitMoveProgress({
+              stage: update.stage,
+              targetMode: mode,
+              totalMovies: 1,
+              completedMovies: 0,
+              currentMovieId: movieId,
+              message: update.message
+            });
+          }
+        });
+        emitMoveProgress({
+          stage: "completed",
+          targetMode: mode,
+          totalMovies: 1,
+          completedMovies: 1,
+          currentMovieId: movieId,
+          message: "Move complete."
+        });
+        return moved;
+      } catch (error) {
+        emitMoveProgress({
+          stage: "error",
+          targetMode: mode,
+          totalMovies: 1,
+          completedMovies: 0,
+          currentMovieId: movieId,
+          message: "Move failed.",
+          error: error instanceof Error ? error.message : String(error)
+        });
+        throw error;
+      }
     }
   );
 
@@ -825,8 +972,48 @@ function registerHandlers(): void {
     "movies:batchMoveMode",
     async (_event, movieIds: string[], mode: LibraryMode) => {
       const moved: MovieRecord[] = [];
+      const total = movieIds.length;
+      let completed = 0;
+      emitMoveProgress({
+        stage: "starting",
+        targetMode: mode,
+        totalMovies: total,
+        completedMovies: 0,
+        currentMovieId: null,
+        message: `Starting batch move (${total} movies)...`
+      });
       for (const movieId of movieIds) {
-        moved.push(await moveMovieToMode(database, movieId, mode));
+        const movie = database.getMovie(movieId);
+        emitMoveProgress({
+          stage: "moving",
+          targetMode: mode,
+          totalMovies: total,
+          completedMovies: completed,
+          currentMovieId: movieId,
+          message: `Moving ${completed + 1}/${total}: ${movie?.title ?? movieId}`
+        });
+        const updated = await moveMovieToMode(database, movieId, mode, {
+          onProgress: (update) => {
+            emitMoveProgress({
+              stage: update.stage,
+              targetMode: mode,
+              totalMovies: total,
+              completedMovies: completed,
+              currentMovieId: movieId,
+              message: update.message
+            });
+          }
+        });
+        moved.push(updated);
+        completed += 1;
+        emitMoveProgress({
+          stage: completed === total ? "completed" : "moving",
+          targetMode: mode,
+          totalMovies: total,
+          completedMovies: completed,
+          currentMovieId: movieId,
+          message: completed === total ? "Batch move complete." : `Moved ${completed}/${total}.`
+        });
       }
       return moved;
     }

@@ -5,6 +5,7 @@ import type {
   DuplicateGroup,
   MetadataSettings,
   LibraryMode,
+  MoveProgress,
   MovieRecord,
   OnlineSubtitleResult,
   OrganizationSettings,
@@ -108,6 +109,15 @@ const api = {
     ipcRenderer.on("scan:progress", listener);
     return () => {
       ipcRenderer.removeListener("scan:progress", listener);
+    };
+  },
+  onMoveProgress: (handler: (progress: MoveProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: MoveProgress) => {
+      handler(progress);
+    };
+    ipcRenderer.on("move:progress", listener);
+    return () => {
+      ipcRenderer.removeListener("move:progress", listener);
     };
   },
   onGentleUnlockResult: (handler: (result: { ok: boolean; message: string }) => void): (() => void) => {

@@ -352,27 +352,6 @@ export function PlayerPage({
                   navigatePlaylist(1);
                 }
               }}
-              onWheel={(e) => {
-                if (!videoRef.current) return;
-                if (e.cancelable) {
-                  e.preventDefault();
-                }
-                const seekAmount = 10; // seconds
-                if (e.deltaY < 0) {
-                  // Scroll up: seek forward
-                  videoRef.current.currentTime = Math.min(
-                    videoRef.current.duration || 0,
-                    videoRef.current.currentTime + seekAmount
-                  );
-                } else if (e.deltaY > 0) {
-                  // Scroll down: seek backward
-                  videoRef.current.currentTime = Math.max(
-                    0,
-                    videoRef.current.currentTime - seekAmount
-                  );
-                }
-                setPlayerCurrentTime(videoRef.current.currentTime);
-              }}
               style={{
                 "--sub-size": `${playerSettings.subtitleFontSize}px`,
                 "--sub-color": playerSettings.subtitleColor,

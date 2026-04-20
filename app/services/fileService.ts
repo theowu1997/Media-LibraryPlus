@@ -11,6 +11,7 @@ import {
 } from "./libraryLayout";
 import type {
   LibraryMode,
+  MoveStage,
   MovieRecord,
   SubtitleRecord
 } from "../shared/contracts";
@@ -27,7 +28,10 @@ function normalizeRootList(value: unknown): string[] {
 export async function moveMovieToMode(
   database: DatabaseClient,
   movieId: string,
-  targetMode: LibraryMode
+  targetMode: LibraryMode,
+  options?: {
+    onProgress?: (update: { stage: MoveStage; message: string }) => void;
+  }
 ): Promise<MovieRecord> {
   const movie = database.getMovie(movieId);
   if (!movie) {
@@ -94,9 +98,13 @@ export async function moveMovieToMode(
   const movedSubtitles: SubtitleRecord[] = [];
 
   try {
+    options?.onProgress?.({ stage: "moving", message: "Moving video file..." });
     await moveFile(movie.sourcePath, targetVideoPath);
     rollbackMoves.push({ from: targetVideoPath, to: movie.sourcePath });
 
+    if (movie.subtitles.length > 0) {
+      options?.onProgress?.({ stage: "subtitles", message: "Moving subtitles..." });
+    }
     for (const subtitle of movie.subtitles) {
       const targetSubtitlePath = await ensureUniquePath(
         buildTargetSubtitlePath({
@@ -121,6 +129,7 @@ export async function moveMovieToMode(
       });
     }
 
+    options?.onProgress?.({ stage: "nfo", message: "Writing NFO..." });
     await writeMovieNfo({
       directory: targetDirectory,
       libraryMode: targetMode,
@@ -133,6 +142,7 @@ export async function moveMovieToMode(
       organizationSettings
     });
   } catch (error) {
+    options?.onProgress?.({ stage: "rollback", message: "Rolling back partial move..." });
     await fs.rm(targetNfoPath, { force: true }).catch(() => undefined);
     for (const rollback of rollbackMoves.reverse()) {
       await moveFile(rollback.from, rollback.to).catch(() => undefined);
@@ -149,6 +159,7 @@ export async function moveMovieToMode(
     throw new Error(`Cannot move "${path.basename(movie.sourcePath)}"${hint}`);
   }
 
+  options?.onProgress?.({ stage: "database", message: "Updating database..." });
   database.upsertMovie({
     id: movie.id,
     title: movie.title,
@@ -165,6 +176,7 @@ export async function moveMovieToMode(
   });
   database.replaceSubtitles(movie.id, movedSubtitles);
 
+  options?.onProgress?.({ stage: "cleanup", message: "Cleaning up old folders..." });
   await cleanupDirectory(path.dirname(movie.sourcePath));
 
   return database.getMovie(movie.id) ?? {

@@ -34,10 +34,12 @@ import { PlayerPage } from "./components/PlayerPage";
 import { PinPromptDialog } from "./components/PinPromptDialog";
 import { ScanOptionsDialog } from "./components/ScanOptionsDialog";
 import { ScanToast } from "./components/ScanToast";
+import { MoveToast } from "./components/MoveToast";
 import { SettingsPage } from "./components/SettingsPage";
 import { usePlayer } from "./hooks/usePlayer";
 import { useSettings } from "./hooks/useSettings";
 import { useScanProgress } from "./hooks/useScanProgress";
+import { useMoveProgress } from "./hooks/useMoveProgress";
 import { useLibrary } from "./hooks/useLibrary";
 import { useSelection } from "./hooks/useSelection";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
@@ -124,6 +126,13 @@ export function App() {
     desktopApi,
     onScanRefresh: () => refreshMoviesRef.current(),
   });
+
+  const {
+    moveProgress,
+    setMoveProgress,
+    isMoving,
+    progressPercent: moveProgressPercent,
+  } = useMoveProgress({ desktopApi });
 
   const {
     movies, setMovies,
@@ -796,6 +805,15 @@ export function App() {
           scanStageLabel={scanStageLabel}
           onCancel={() => void desktopApi?.cancelScan()}
           onDismiss={() => setScanProgress(null)}
+        />
+      )}
+
+      {moveProgress && (
+        <MoveToast
+          moveProgress={moveProgress}
+          isMoving={isMoving}
+          progressPercent={moveProgressPercent}
+          onDismiss={() => setMoveProgress(null)}
         />
       )}
 

@@ -82,30 +82,7 @@ export function AppTopBar({
         </section>
       )}
 
-      {lastScanSummaryInvalidFiles.length > 0 && (
-        <section className="panel scan-report-panel">
-          <div className="scan-monitor-header">
-            <div>
-              <p className="eyebrow">Skipped file report</p>
-              <h3>Some videos were blocked by validation or the current import rules.</h3>
-            </div>
-            <span className="monitor-status">
-              {lastScanSummaryInvalidFiles.length} blocked
-            </span>
-          </div>
-          <div className="scan-report-grid">
-            {lastScanSummaryInvalidFiles.map((item) => (
-              <article className="report-item" key={`${item.path}:${item.reason}`}>
-                <span className={`report-pill ${item.status}`}>
-                  {rejectedLabel(item.status as "incomplete" | "corrupt" | "invalid" | "unsupported")}
-                </span>
-                <strong className="report-reason">{item.reason}</strong>
-                <code>{item.path}</code>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
+      {null}
     </>
   );
 }

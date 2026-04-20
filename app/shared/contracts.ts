@@ -180,6 +180,27 @@ export interface ScanProgress {
   message: string;
 }
 
+export type MoveStage =
+  | "starting"
+  | "moving"
+  | "subtitles"
+  | "nfo"
+  | "database"
+  | "cleanup"
+  | "rollback"
+  | "completed"
+  | "error";
+
+export interface MoveProgress {
+  stage: MoveStage;
+  targetMode: LibraryMode;
+  totalMovies: number;
+  completedMovies: number;
+  currentMovieId: string | null;
+  message: string;
+  error?: string;
+}
+
 export interface MetadataSettings {
   tmdbReadAccessToken: string;
   language: string;

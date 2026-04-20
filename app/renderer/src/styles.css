@@ -2656,6 +2656,11 @@ kbd {
   animation: scan-toast-in 0.2s ease;
 }
 
+.move-toast {
+  left: auto;
+  right: 18px;
+}
+
 .scan-toast.done {
   border-color: rgba(46, 204, 113, 0.3);
 }

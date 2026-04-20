@@ -12,6 +12,7 @@ import type {
   ScanAutomationOptions,
   ScanProgress,
   ScanSummary,
+  MoveProgress,
   SubtitleGenerationOptions,
   SubtitleGenerationResult,
   SubtitleScanResult
@@ -64,6 +65,7 @@ declare global {
       playerClearPlaybackCheckpoint: (movieId: string) => Promise<void>;
       playerGetFileUrl: (filePath: string) => Promise<string>;
       onScanProgress: (handler: (progress: ScanProgress) => void) => () => void;
+      onMoveProgress: (handler: (progress: MoveProgress) => void) => () => void;
       onGentleUnlockResult: (handler: (result: { ok: boolean; message: string }) => void) => () => void;
       resolveDuplicate: (keepPath: string, deletePaths: string[], gentleUnlocked?: boolean) => Promise<{ deleted: number; blocked: number }>;
       addSubtitleDir: () => Promise<AppShellState>;

@@ -46,7 +46,8 @@ export function useKeyboardShortcuts({
 }: UseKeyboardShortcutsOptions): void {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
-      const tag = (e.target as HTMLElement).tagName;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
       // F5 or Ctrl+R → scan saved folders
@@ -90,6 +91,7 @@ export function useKeyboardShortcuts({
       // ── Player shortcuts (VLC-style) ──────────────────────────────────────
       if (activePageRef.current === "player" && videoRef.current) {
         const video = videoRef.current;
+        const isInPlayerControls = Boolean(target?.closest?.(".player-controls"));
 
         // Space → play/pause
         if (e.key === " ") {
@@ -121,6 +123,7 @@ export function useKeyboardShortcuts({
         }
         // Left/Right → seek (Ctrl: ±60s, Shift: ±3s, plain: ±10s)
         if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          if (!isInPlayerControls) return;
           e.preventDefault();
           const dir = e.key === "ArrowRight" ? 1 : -1;
           const step = e.ctrlKey ? 60 : e.shiftKey ? 3 : 10;
@@ -130,6 +133,7 @@ export function useKeyboardShortcuts({
         }
         // Up/Down → volume ±5%
         if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          if (!isInPlayerControls) return;
           e.preventDefault();
           const next = Math.max(0, Math.min(1, Math.round((video.volume + (e.key === "ArrowUp" ? 0.05 : -0.05)) * 100) / 100));
           video.volume = next;
