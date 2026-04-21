@@ -27,6 +27,8 @@ export function HomePage({ movies, appState, lastScanSummary }: HomePageProps) {
       : [];
   const latestScan = recentScans[0]?.summary ?? null;
   const subtitleSearchLogs = latestScan?.subtitleSearchLogs ?? [];
+  const moveErrors = latestScan?.errors ?? [];
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [copiedLogs, setCopiedLogs] = useState(false);
 
   async function handleCopySubtitleLogs(): Promise<void> {
@@ -110,6 +112,32 @@ export function HomePage({ movies, appState, lastScanSummary }: HomePageProps) {
         <section className="panel home-panel">
           <p className="eyebrow">Recent scans</p>
           <h3>Scan results</h3>
+          {/* Move/rename errors section */}
+          {moveErrors.length > 0 && (
+            <div className="scan-error-block" style={{ marginBottom: "1rem", background: "#2a1a1a", border: "1px solid #ff7a3d", borderRadius: 8, padding: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: "#ff7a3d", fontSize: 20 }}>⚠️</span>
+                <span style={{ color: "#ff7a3d", fontWeight: 600 }}>
+                  {moveErrors.length} file{moveErrors.length === 1 ? "" : "s"} failed to move/rename after scan.
+                </span>
+                <button
+                  className="ghost-button"
+                  style={{ marginLeft: "auto" }}
+                  onClick={() => setShowErrorDetails((v) => !v)}
+                  type="button"
+                >
+                  {showErrorDetails ? "Hide details" : "Show details"}
+                </button>
+              </div>
+              {showErrorDetails && (
+                <ul style={{ margin: "10px 0 0 0", padding: 0, listStyle: "none", color: "#ffbfa3", fontSize: 14 }}>
+                  {moveErrors.map((err, i) => (
+                    <li key={i} style={{ marginBottom: 4, wordBreak: "break-all" }}>{err}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {subtitleSearchLogs.length > 0 && (
             <div className="inline-actions" style={{ marginBottom: "0.85rem" }}>
               <button className="ghost-button" onClick={() => void handleCopySubtitleLogs()} type="button">

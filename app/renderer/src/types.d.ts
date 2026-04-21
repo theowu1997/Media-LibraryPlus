@@ -72,6 +72,10 @@ declare global {
       removeSubtitleDir: (dir: string) => Promise<AppShellState>;
       scanSubtitleDirs: () => Promise<SubtitleScanResult>;
       generateSubtitleForMovie: (movieId: string, options: SubtitleGenerationOptions) => Promise<SubtitleGenerationResult>;
+      // Detachable player window IPC methods
+      openDetachedPlayer?: (fileUrl: string) => void;
+      onPlayerSetVideo?: (handler: (path: string) => void) => void;
+      requestPlayerVideo?: () => void;
     };
   }
 }

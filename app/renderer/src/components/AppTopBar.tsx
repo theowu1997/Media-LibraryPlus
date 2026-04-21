@@ -10,7 +10,7 @@ interface AppTopBarProps {
   searchInput: string;
   onSearchChange: (value: string) => void;
   isScanning: boolean;
-  onOpenScanOptions: (mode: LibraryMode) => void;
+  onOpenScanOptions: () => void;
   onCancelScan: () => void;
   gentleUnlocked: boolean;
   scanProgress: ScanProgress | null;
@@ -48,7 +48,7 @@ export function AppTopBar({
           <button
             className="primary-button"
             disabled={isScanning}
-            onClick={() => onOpenScanOptions("normal")}
+            onClick={onOpenScanOptions}
             type="button"
           >
             {isScanning ? "Scanning..." : "Scan library"}

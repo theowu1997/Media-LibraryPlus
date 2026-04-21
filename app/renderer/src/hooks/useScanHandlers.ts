@@ -104,19 +104,20 @@ export function useScanHandlers({
     }
   }
 
-  function openScanOptions(mode: LibraryMode): void {
+  function openScanOptions(): void {
     if (isScanning) {
       setStatusMessage("A scan is already running.");
       return;
     }
-    setPendingScanMode(mode);
+    // Default to normal mode, but let user pick in dialog
+    setPendingScanMode("normal");
     const hasSavedRoots =
       (appState?.roots.normal.length ?? 0) + (appState?.roots.gentle.length ?? 0) > 0;
     setScanSourceMode(hasSavedRoots ? "saved" : "folder");
     setScanOptionsDraft((current) => ({
       ...current,
-      addToNormalModeLibrary: mode === "normal",
-      addToGentleModeLibrary: mode === "gentle",
+      addToNormalModeLibrary: true,
+      addToGentleModeLibrary: false,
     }));
     setShowScanOptionsPrompt(true);
   }

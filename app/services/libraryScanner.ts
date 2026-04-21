@@ -1,3 +1,25 @@
+// Helper: concurrency-limited parallel execution
+async function runWithConcurrencyLimit<T>(tasks: (() => Promise<T>)[], limit: number): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = [];
+  let i = 0;
+  const running: Promise<void>[] = [];
+  async function runOne() {
+    if (i >= tasks.length) return;
+    const idx = i++;
+    try {
+      const res = await tasks[idx]();
+      results[idx] = { status: "fulfilled", value: res };
+    } catch (err) {
+      results[idx] = { status: "rejected", reason: err };
+    }
+    await runOne();
+  }
+  for (let j = 0; j < Math.min(limit, tasks.length); j++) {
+    running.push(runOne());
+  }
+  await Promise.all(running);
+  return results;
+}
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { DatabaseClient } from "../database/database";
@@ -477,6 +499,7 @@ async function walkForVideos(
   }
   const videoFiles: string[] = [];
 
+  const ARCHIVE_EXTENSIONS = [".zip", ".rar", ".7z"];
   for (const entry of entries) {
     const resolved = path.join(root, entry.name);
     if (entry.isDirectory()) {
@@ -487,6 +510,38 @@ async function walkForVideos(
     }
 
     const extension = path.extname(entry.name).toLowerCase();
+    // Archive detection
+    if (ARCHIVE_EXTENSIONS.includes(extension)) {
+      rejectedFiles.push({
+        path: resolved,
+        status: "unsupported",
+        reason: `Archive file detected (${extension}). Archives are not supported.`
+      });
+      continue;
+    }
+    // Simple encrypted file detection for .zip (header check)
+    if (extension === ".zip") {
+      try {
+        const fd = await fs.open(resolved, "r");
+        const buffer = Buffer.alloc(30); // Enough for local file header
+        await fd.read(buffer, 0, 30, 0);
+        fd.close();
+        // Check for encrypted flag in general purpose bit flag (byte 6-7)
+        if (buffer.readUInt32LE(0) === 0x04034b50) { // PK\x03\x04
+          const flag = buffer.readUInt16LE(6);
+          if (flag & 0x1) {
+            rejectedFiles.push({
+              path: resolved,
+              status: "unsupported",
+              reason: `Encrypted ZIP archive detected. Encrypted archives are not supported.`
+            });
+            continue;
+          }
+        }
+      } catch {
+        // If error reading, treat as generic archive
+      }
+    }
     if (VIDEO_EXTENSIONS.includes(extension as (typeof VIDEO_EXTENSIONS)[number])) {
       videoFiles.push(resolved);
       continue;
@@ -622,53 +677,83 @@ async function applyProcessingOptions(params: {
         }, path.extname(currentVideoPath))
       );
 
-      if (path.resolve(targetVideoPath) !== path.resolve(currentVideoPath)) {
-        await moveFile(currentVideoPath, targetVideoPath);
-      }
-      currentVideoPath = targetVideoPath;
-      currentFolderPath = targetDirectory;
-    } catch (error) {
-      warnings.push(`Move/Rename failed: ${formatError(error)}`);
-    }
-  }
-
-  if (currentSubtitles.length > 0 && needsOrganizedPlacement) {
-    const movedSubtitles: SubtitleCandidate[] = [];
-
-    for (const subtitle of currentSubtitles) {
-      try {
-        const extension = path.extname(subtitle.path);
-        const targetSubtitlePath = await ensureUniquePath(
-          buildTargetSubtitlePath({
-            directory: currentFolderPath,
-            title: params.title,
-            year: params.year,
-            videoId: params.videoId,
-            actresses: params.actresses,
-            modelName: params.modelName,
-            language: subtitle.language,
-            extension,
-            subtitleCount: currentSubtitles.length,
-            resolveLongPath: params.scanOptions.resolveLongPath,
-            organizationSettings: params.organizationSettings
-          })
-        );
-
-        if (path.resolve(targetSubtitlePath) !== path.resolve(subtitle.path)) {
-          await moveFile(subtitle.path, targetSubtitlePath);
-        }
-
-        movedSubtitles.push({
-          ...subtitle,
-          path: targetSubtitlePath
+      // Prepare move tasks: video and subtitles
+      const moveTasks: (() => Promise<void>)[] = [];
+      let videoMoveNeeded = path.resolve(targetVideoPath) !== path.resolve(currentVideoPath);
+      if (videoMoveNeeded) {
+        moveTasks.push(async () => {
+          await moveFile(currentVideoPath, targetVideoPath);
         });
-      } catch (error) {
-        warnings.push(`Subtitle move failed: ${formatError(error)}`);
-        movedSubtitles.push(subtitle);
       }
-    }
+      // For subtitles
+      const subtitleTargetPaths: string[] = [];
+      if (currentSubtitles.length > 0) {
+        for (let idx = 0; idx < currentSubtitles.length; idx++) {
+          const subtitle = currentSubtitles[idx];
+          const extension = path.extname(subtitle.path);
+          const targetSubtitlePath = await ensureUniquePath(
+            buildTargetSubtitlePath({
+              directory: targetDirectory,
+              title: params.title,
+              year: params.year,
+              videoId: params.videoId,
+              actresses: params.actresses,
+              modelName: params.modelName,
+              language: subtitle.language,
+              extension,
+              subtitleCount: currentSubtitles.length,
+              resolveLongPath: params.scanOptions.resolveLongPath,
+              organizationSettings: params.organizationSettings
+            })
+          );
+          subtitleTargetPaths.push(targetSubtitlePath);
+          if (path.resolve(targetSubtitlePath) !== path.resolve(subtitle.path)) {
+            moveTasks.push(async () => {
+              await moveFile(subtitle.path, targetSubtitlePath);
+            });
+          }
+        }
+      }
 
-    currentSubtitles = movedSubtitles;
+      // Run all move tasks in parallel with concurrency limit
+      if (moveTasks.length > 0) {
+        const results = await runWithConcurrencyLimit(moveTasks, 4);
+        results.forEach((res, idx) => {
+          if (res.status === "rejected") {
+            if (idx === 0 && videoMoveNeeded) {
+              const msg = `Move/Rename failed: ${formatError(res.reason)}`;
+              warnings.push(msg);
+              // eslint-disable-next-line no-console
+              console.error("[MLA+ SCAN]", msg, res.reason);
+            } else {
+              const msg = `Subtitle move failed: ${formatError(res.reason)}`;
+              warnings.push(msg);
+            }
+          }
+        });
+      }
+
+      // Update current paths after move
+      if (videoMoveNeeded) {
+        currentVideoPath = targetVideoPath;
+        currentFolderPath = targetDirectory;
+      }
+      if (currentSubtitles.length > 0) {
+        const movedSubtitles: SubtitleCandidate[] = [];
+        for (let idx = 0; idx < currentSubtitles.length; idx++) {
+          const subtitle = currentSubtitles[idx];
+          const targetSubtitlePath = subtitleTargetPaths[idx];
+          movedSubtitles.push({ ...subtitle, path: targetSubtitlePath });
+        }
+        currentSubtitles = movedSubtitles;
+      }
+    } catch (error) {
+      const msg = `Move/Rename failed: ${formatError(error)}`;
+      warnings.push(msg);
+      // Explicit error reporting
+      // eslint-disable-next-line no-console
+      console.error("[MLA+ SCAN]", msg, error);
+    }
   }
 
   if (

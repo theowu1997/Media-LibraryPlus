@@ -19,7 +19,13 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/renderer"),
     emptyOutDir: false,
-    cssMinify: false
+    cssMinify: false,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "app/renderer/index.html"),
+        player: path.resolve(__dirname, "app/renderer/player.html")
+      }
+    }
   },
   test: {
     globals: true,

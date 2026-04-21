@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
+// Minimum and maximum player size
+const MIN_PLAYER_WIDTH = 420;
+const MIN_PLAYER_HEIGHT = 240;
+const MAX_PLAYER_WIDTH = 1920;
+const MAX_PLAYER_HEIGHT = 1080;
 import type { MovieRecord, OnlineSubtitleResult, PlayerSettings } from "../../../shared/contracts";
 import type { } from "react";
 import { formatTime } from "../utils";
@@ -152,6 +157,9 @@ export function PlayerPage({
   const playerMovie = movies.find((m) => m.id === playerMovieId) ?? null;
   const allPlayerMovies = allMoviesPool.length > 0 ? allMoviesPool : movies;
   const [videoHidden, setVideoHidden] = useState(false);
+  // Resizable player state
+  const [playerSize, setPlayerSize] = useState<{ width: number; height: number }>({ width: 800, height: 450 });
+  const resizingRef = useRef(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [closingDropdown, setClosingDropdown] = useState(false);
   const dropdownTimer = useRef<number | null>(null);
@@ -206,6 +214,29 @@ export function PlayerPage({
     };
   }, [playerShowMovieList]);
 
+  // Handle drag resize
+  function handleResizeStart(e: React.MouseEvent) {
+    e.preventDefault();
+    resizingRef.current = true;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = playerSize.width;
+    const startHeight = playerSize.height;
+    function onMove(ev: MouseEvent) {
+      if (!resizingRef.current) return;
+      const nextWidth = Math.max(MIN_PLAYER_WIDTH, Math.min(MAX_PLAYER_WIDTH, startWidth + (ev.clientX - startX)));
+      const nextHeight = Math.max(MIN_PLAYER_HEIGHT, Math.min(MAX_PLAYER_HEIGHT, startHeight + (ev.clientY - startY)));
+      setPlayerSize({ width: nextWidth, height: nextHeight });
+    }
+    function onUp() {
+      resizingRef.current = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   return (
     <section className="page player-page" ref={playerContainerRef}>
       {/* Top bar: now-playing title + actions */}
@@ -238,6 +269,11 @@ export function PlayerPage({
               await loadMovieIntoPlayer(allPlayerMovies[0]);
               if (videoRef.current) { void videoRef.current.play().catch(() => {}); }
             }}>Play all</button>
+            {playerFileUrl && (
+              <button className="ghost-button" type="button" onClick={() => {
+                window.desktopApi?.openDetachedPlayer?.(playerFileUrl);
+              }}>Pop Out</button>
+            )}
             <button className="ghost-button" type="button" onClick={() => {
               const next = !playerMuted;
               setPlayerMuted(next);
@@ -298,11 +334,25 @@ export function PlayerPage({
 
         <div className="player-body">
         {/* Video */}
-        <div className="player-video-wrap" onClick={() => {
-          if (!videoRef.current) return;
-          if (playerPlaying) { videoRef.current.pause(); setPlayerPlaying(false); }
-          else { void videoRef.current.play(); setPlayerPlaying(true); }
-        }}>
+        <div
+          className={`player-video-wrap resizable-player`}
+          data-player-width={playerSize.width}
+          data-player-height={playerSize.height}
+          data-player-filter={videoFilter}
+          onClick={() => {
+            if (!videoRef.current) return;
+            if (playerPlaying) { videoRef.current.pause(); setPlayerPlaying(false); }
+            else { void videoRef.current.play(); setPlayerPlaying(true); }
+          }}
+        >
+                    {/* Resize handle */}
+                    <div
+                      className="player-resize-handle"
+                      onMouseDown={handleResizeStart}
+                      title="Drag to resize player"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 15h12M6 12h9M9 9h6" stroke="#aaa" strokeWidth="2" strokeLinecap="round"/></svg>
+                    </div>
           {videoHidden ? (
             <div className="player-empty">
               <div className="player-empty-card">
@@ -352,11 +402,8 @@ export function PlayerPage({
                   navigatePlaylist(1);
                 }
               }}
-              style={{
-                "--sub-size": `${playerSettings.subtitleFontSize}px`,
-                "--sub-color": playerSettings.subtitleColor,
-                filter: videoFilter,
-              } as React.CSSProperties}
+              data-sub-size={playerSettings.subtitleFontSize}
+              data-sub-color={playerSettings.subtitleColor}
             >
               {playerSubTrackUrl && (
                 <track
@@ -508,7 +555,7 @@ export function PlayerPage({
               setPlayerCurrentTime(t);
               void handlePlaybackTimeUpdate(t);
             }}
-            style={{ "--pct": `${(playerCurrentTime / (playerDuration || 1)) * 100}%` } as React.CSSProperties}
+            data-pct={(playerCurrentTime / (playerDuration || 1)) * 100}
           />
           <div className="player-controls-row">
             <div className="player-controls-left">

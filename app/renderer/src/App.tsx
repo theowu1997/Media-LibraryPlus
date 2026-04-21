@@ -5,6 +5,18 @@ import {
   useRef,
   useState
 } from "react";
+// Toast for move/rename errors after scan
+function MoveErrorToast({ errors, onDismiss }: { errors: string[]; onDismiss: () => void }) {
+  return (
+    <div className="scan-toast move-error-toast active">
+      <span className="move-error-icon">⚠️</span>
+      <span className="move-error-msg">
+        Some files failed to move/rename after scan. <span className="move-error-count">{errors.length} error{errors.length === 1 ? "" : "s"}.</span> See scan summary for details.
+      </span>
+      <button className="ghost-button move-error-dismiss" onClick={onDismiss} title="Dismiss" type="button">✕</button>
+    </div>
+  );
+}
 import type {
   AppPage,
   AppShellState,
@@ -66,6 +78,8 @@ const PAGE_SIZE = 200;
 
 
 export function App() {
+    // Toast state for move/rename errors after scan
+    const [showMoveErrorToast, setShowMoveErrorToast] = useState(false);
   const desktopApi = window.desktopApi;
   const [appState, setAppState] = useState<AppShellState | null>(null);
   const [activePage, setActivePage] = useState<AppPage>("home");
@@ -126,6 +140,13 @@ export function App() {
     desktopApi,
     onScanRefresh: () => refreshMoviesRef.current(),
   });
+
+  // Show move error toast if scan completes and errors are present
+  useEffect(() => {
+    if (lastScanSummary && lastScanSummary.errors && lastScanSummary.errors.length > 0) {
+      setShowMoveErrorToast(true);
+    }
+  }, [lastScanSummary]);
 
   const {
     moveProgress,
@@ -729,12 +750,10 @@ export function App() {
       {selectionBox && (
         <div
           className="selection-box"
-          style={{
-            height: selectionBox.height,
-            left: selectionBox.left,
-            top: selectionBox.top,
-            width: selectionBox.width
-          }}
+          data-height={selectionBox.height}
+          data-width={selectionBox.width}
+          data-left={selectionBox.left}
+          data-top={selectionBox.top}
         />
       )}
 
@@ -806,6 +825,11 @@ export function App() {
           onCancel={() => void desktopApi?.cancelScan()}
           onDismiss={() => setScanProgress(null)}
         />
+      )}
+
+      {/* Move/rename error toast after scan */}
+      {showMoveErrorToast && lastScanSummary?.errors?.length > 0 && (
+        <MoveErrorToast errors={lastScanSummary.errors} onDismiss={() => setShowMoveErrorToast(false)} />
       )}
 
       {moveProgress && (

@@ -1,3 +1,50 @@
+/* Selection box for drag-select */
+.selection-box {
+  position: fixed;
+  pointer-events: none;
+  border: 2px dashed var(--primary, #ff7a3d);
+  background: rgba(255, 122, 61, 0.08);
+  z-index: 9999;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  height: attr(data-height px, 0px);
+  width: attr(data-width px, 0px);
+  left: attr(data-left px, 0px);
+  top: attr(data-top px, 0px);
+}
+/* Move/rename error toast styles */
+.move-error-toast {
+  background: #2a1a1a;
+  border: 1px solid #ff7a3d;
+  color: #ff7a3d;
+  position: fixed;
+  bottom: 32px;
+  left: 32px;
+  z-index: 1000;
+  min-width: 320px;
+  max-width: 480px;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px #0008;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.move-error-icon {
+  font-size: 22px;
+}
+.move-error-msg {
+  flex: 1;
+}
+.move-error-count {
+  font-weight: 600;
+}
+.move-error-dismiss {
+  color: #ff7a3d;
+  font-weight: 600;
+  font-size: 18px;
+  margin-left: 8px;
+}
 /* Visually hidden utility for accessibility */
 .visually-hidden {
   position: absolute !important;

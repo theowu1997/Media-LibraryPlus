@@ -1,3 +1,4 @@
+
 import path from "node:path";
 import fs from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -10,6 +11,7 @@ import { DEFAULT_SCAN_OPTIONS, scanLibraries, createCancelToken, type CancelToke
 import { enrichMoviePoster } from "../services/metadataService";
 import { SUBTITLE_EXTENSIONS } from "../shared/contracts";
 import { extractVideoIdCandidates } from "../shared/videoId";
+
 import type {
   AppShellState,
   MetadataSettings,
@@ -29,7 +31,62 @@ import type {
   SubtitleGenerationResult
 } from "../shared/contracts";
 
+// Respond to player window requesting the current video path
+ipcMain.on("player:requestVideo", (event) => {
+  // This is a simple implementation; you may want to store the last videoPath sent
+  // or enhance this logic as needed.
+  // For now, do nothing (the main window should always send the video path on open).
+});
+// Respond to player window requesting the current video path
+ipcMain.on("player:requestVideo", (event) => {
+  // This is a simple implementation; you may want to store the last videoPath sent
+  // or enhance this logic as needed.
+  // For now, do nothing (the main window should always send the video path on open).
+});
+
 let mainWindow: BrowserWindow | null = null;
+let playerWindow: BrowserWindow | null = null;
+// Create a detachable player window
+function createPlayerWindow(videoPath: string) {
+  if (playerWindow) {
+    playerWindow.focus();
+    playerWindow.webContents.send("player:setVideo", videoPath);
+    return;
+  }
+  playerWindow = new BrowserWindow({
+    width: 900,
+    height: 540,
+    minWidth: 400,
+    minHeight: 240,
+    title: "MLA+ Player",
+    backgroundColor: "#000000",
+    alwaysOnTop: false,
+    resizable: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+  if (rendererUrl) {
+    // If running in dev mode, load the dev server with player.html
+    void playerWindow.loadURL(rendererUrl.replace('index.html', 'player.html'));
+  } else {
+    // In production, load the built player.html
+    void playerWindow.loadFile(path.join(__dirname, "../renderer/player.html"));
+  }
+  playerWindow.on("closed", () => {
+    playerWindow = null;
+  });
+  playerWindow.webContents.once("did-finish-load", () => {
+    playerWindow?.webContents.send("player:setVideo", videoPath);
+  });
+}
+// IPC handler to open the detachable player window
+ipcMain.handle("player:openDetached", (_event, videoPath: string) => {
+  createPlayerWindow(videoPath);
+});
 let database: DatabaseClient;
 let gentleUnlocked = false;
 let activeScanToken: CancelToken | null = null;
