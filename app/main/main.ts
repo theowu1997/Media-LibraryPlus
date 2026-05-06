@@ -992,15 +992,18 @@ function registerHandlers(): void {
   });
 }
 
-app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
-app.commandLine.appendSwitch("disable-http-cache");
+if (app) {
+  app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
+  app.commandLine.appendSwitch("disable-http-cache");
+}
 
 const userDataOverride = process.env.MLA_USER_DATA_DIR?.trim();
-if (userDataOverride) {
+if (userDataOverride && app) {
   app.setPath("userData", path.resolve(userDataOverride));
 }
 
-app.whenReady().then(() => {
+if (app) {
+  app.whenReady().then(() => {
 
   const databasePath = path.join(app.getPath("userData"), "mla-plus.db");
   database = new DatabaseClient(databasePath);
@@ -1013,17 +1016,20 @@ app.whenReady().then(() => {
     }
   });
 });
+}
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
+if (app) {
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
+    }
+  });
 
-app.on("before-quit", () => {
-  database?.close();
-  if (registeredGentleShortcut) {
-    globalShortcut.unregister(registeredGentleShortcut);
-    registeredGentleShortcut = null;
-  }
-});
+  app.on("before-quit", () => {
+    database?.close();
+    if (registeredGentleShortcut) {
+      globalShortcut.unregister(registeredGentleShortcut);
+      registeredGentleShortcut = null;
+    }
+  });
+}

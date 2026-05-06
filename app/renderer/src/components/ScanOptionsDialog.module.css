@@ -1,0 +1,286 @@
+:root {
+  --modal-width: 860px;
+  --card-radius-lg: 18px;
+  --card-radius-md: 16px;
+  --card-radius-sm: 12px;
+  --pill-radius: 999px;
+  --badge-radius: 14px;
+  --input-size: 16px;
+  --checkbox-margin-top: 0.2rem;
+  --option-grid-cols: 2;
+  --transition-card: border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  --shadow-card-depth: 0 12px 26px rgba(0, 0, 0, 0.18);
+  --translate-hover: translateY(-1px);
+}
+
+.scanModal {
+  width: min(var(--modal-width), 100%);
+}
+
+.headerGrid {
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+.heroSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.summaryCard {
+  display: grid;
+  gap: var(--spacing-xs);
+  padding: var(--card-padding-y) var(--card-padding-x);
+  border-radius: var(--card-radius-lg);
+  background: var(--primary-04);
+  border: 1px solid var(--primary-08);
+}
+
+.summaryLabel {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.summaryValue {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.summaryHint {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.sectionStack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.sourceGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--option-grid-cols), minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.sourceCard,
+.optionCard,
+.selectCard {
+  display: grid;
+  gap: 0.7rem;
+  padding: var(--card-padding-y) var(--card-padding-x);
+  border-radius: var(--card-radius-md);
+  border: 1px solid var(--primary-08);
+  background: var(--primary-02);
+  transition: var(--transition-card);
+}
+
+.sourceCard {
+  cursor: pointer;
+}
+
+.sourceCard:hover,
+.optionCard:hover,
+.selectCard:hover {
+  border-color: var(--primary-18);
+  background: var(--primary-05);
+  transform: var(--translate-hover);
+}
+
+.sourceCardActive,
+.optionCardChecked {
+  border-color: var(--secondary);
+  background: var(--secondary-10);
+  box-shadow: var(--shadow-card-depth);
+}
+
+.sourceHeader,
+.optionHeader {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: flex-start;
+}
+
+.sourceHeader input,
+.optionHeader input {
+  margin-top: var(--checkbox-margin-top);
+  width: var(--input-size);
+  height: var(--input-size);
+  accent-color: var(--secondary);
+  flex-shrink: 0;
+}
+
+.sourceTitle,
+.optionTitle,
+.groupTitle {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sourceHint,
+.optionHint,
+.groupHint,
+.sectionHint {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: var(--font-size-sm);
+}
+
+.destinationCard {
+  display: grid;
+  gap: 0.6rem;
+  padding: var(--card-padding-x);
+  border-radius: var(--card-radius-md);
+  background: var(--primary-03);
+  border: 1px solid var(--primary-08);
+}
+
+.destinationMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.destinationState {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--spacing-xs) 0.7rem;
+  border-radius: var(--pill-radius);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.destinationReady {
+  background: var(--secondary-16);
+  color: #d8fff7;
+}
+
+.destinationWarning {
+  background: var(--warning-14);
+  color: #ffd8a1;
+}
+
+.groupCard {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.groupHeader {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--option-grid-cols), minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.optionHeader span {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.optionMeta {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.22rem 0.58rem;
+  border-radius: var(--pill-radius);
+  background: var(--primary-08);
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}
+
+.optionCardChecked .optionMeta {
+  background: var(--secondary-18);
+  color: #d8fff7;
+}
+
+.optionCardDisabled {
+  opacity: 0.65;
+}
+
+.selectCard {
+  align-content: start;
+}
+
+.selectLabel {
+  display: grid;
+  gap: 0.45rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.selectControl {
+  width: 100%;
+  border-radius: var(--card-radius-sm);
+  border: 1px solid var(--primary-10);
+  background: var(--primary-05);
+  color: var(--text);
+  padding: 0.85rem var(--card-padding-x);
+}
+
+.selectControl:disabled {
+  opacity: 0.55;
+}
+
+.warningNote {
+  display: grid;
+  gap: var(--spacing-xs);
+  padding: 0.85rem var(--card-padding-x);
+  border-radius: var(--badge-radius);
+  background: var(--warning-08);
+  border: 1px solid var(--warning-20);
+}
+
+.zeroMargin {
+  margin: 0;
+}
+
+.sectionIntro {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.targetGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--option-grid-cols), minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.actionRow {
+  align-items: center;
+}
+
+.actionMeta {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+@media (max-width: var(--bp-sm)) {
+  .heroSummary,
+  .sourceGrid,
+  .optionGrid,
+  .targetGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .destinationMeta,
+  .actionRow {
+    align-items: stretch;
+  }
+
+  .actionMeta {
+    margin-right: 0;
+  }
+}

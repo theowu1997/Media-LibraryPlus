@@ -1,15 +1,92 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { PosterVisual } from "../components/PosterVisual";
 import { SamplePosterCard } from "../components/SamplePosterCard";
 import { ScanToast } from "../components/ScanToast";
 import { AppTopBar } from "../components/AppTopBar";
 import { PinPromptDialog } from "../components/PinPromptDialog";
+import { ScanOptionsDialog } from "../components/ScanOptionsDialog";
 import { ContextMenu } from "../components/ContextMenu";
 import { DuplicateResolutionModal } from "../components/DuplicateResolutionModal";
 import { MovieTile } from "../components/MovieTile";
-import type { DuplicateGroup, MovieRecord, ScanProgress } from "../../../shared/contracts";
+import type { DuplicateGroup, MovieRecord, OrganizationSettings, ScanAutomationOptions, ScanProgress } from "../../../shared/contracts";
+
+const CLOSE_ANIMATION_DELAY = 160;
+const noop = () => {};
+
+function makeMovie(overrides: Partial<MovieRecord> = {}): MovieRecord {
+  return {
+    id: "test-id",
+    title: "Test Movie",
+    videoId: "TEST-001",
+    year: 2023,
+    resolution: "1080p",
+    posterUrl: "https://example.com/poster.jpg",
+    posterSource: "web",
+    sourcePath: "C:/library/normal/test.mp4",
+    folderPath: "C:/library/normal",
+    libraryMode: "normal",
+    actresses: [],
+    keywords: [],
+    subtitles: [],
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeScanProgress(overrides: Partial<ScanProgress> = {}): ScanProgress {
+  return {
+    stage: "processing",
+    mode: "normal",
+    currentRoot: null,
+    currentFile: "movie.mp4",
+    processedFiles: 10,
+    totalFiles: 20,
+    imported: 10,
+    skipped: 0,
+    message: "",
+    ...overrides,
+  };
+}
+
+function makeGroup(overrides: Partial<DuplicateGroup> = {}): DuplicateGroup {
+  return {
+    key: "group-1",
+    videoId: "DUP-001",
+    title: "Duplicate Movie",
+    files: [
+      { path: "/lib/a.mp4", resolution: "1080p", fileSize: 1000, autoSelected: true },
+      { path: "/lib/b.mp4", resolution: "1080p", fileSize: 900, autoSelected: false },
+    ],
+    ...overrides,
+  };
+}
+
+const organizationDraft: OrganizationSettings = {
+  normalPathTemplate: "{title}",
+  gentlePathTemplate: "{title}",
+  fileNameTemplate: "{videoId}",
+  normalLibraryPath: "C:/Library/Normal",
+  gentleLibraryPath: "C:/Library/Gentle",
+};
+
+const scanOptionsDraft: ScanAutomationOptions = {
+  fastScan: false,
+  importOnlyCompleteVideos: false,
+  importBetterQuality: true,
+  autoResolveDuplicates: true,
+  moveRename: false,
+  copyToLibrary: false,
+  scanAllSubfolders: true,
+  resolveLongPath: true,
+  autoConvertToMp4: false,
+  autoMatchSubtitle: true,
+  autoDownloadSubtitleFromSubtitleCat: false,
+  preferredSubtitleLanguage: "en",
+  addToNormalModeLibrary: true,
+  addToGentleModeLibrary: false,
+};
 
 // ---------------------------------------------------------------------------
 // SamplePosterCard
@@ -109,46 +186,9 @@ describe("PosterVisual", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Helper
-// ---------------------------------------------------------------------------
-function makeMovie(overrides: Partial<MovieRecord> = {}): MovieRecord {
-  return {
-    id: "test-id",
-    title: "Test Movie",
-    videoId: "TEST-001",
-    year: 2023,
-    resolution: "1080p",
-    posterUrl: "https://example.com/poster.jpg",
-    posterSource: "web",
-    sourcePath: "C:/library/normal/test.mp4",
-    folderPath: "C:/library/normal",
-    libraryMode: "normal",
-    actresses: [],
-    keywords: [],
-    subtitles: [],
-    updatedAt: new Date().toISOString(),
-    ...overrides,
-  };
-}
-
-// ---------------------------------------------------------------------------
 // ScanToast
 // ---------------------------------------------------------------------------
 describe("ScanToast", () => {
-  function makeScanProgress(overrides: Partial<ScanProgress> = {}): ScanProgress {
-    return {
-      stage: "processing",
-      mode: "normal",
-      currentRoot: null,
-      currentFile: "movie.mp4",
-      processedFiles: 10,
-      totalFiles: 20,
-      imported: 10,
-      skipped: 0,
-      message: "",
-      ...overrides,
-    };
-  }
 
   it("shows scanning label when isScanning is true", () => {
     render(
@@ -346,6 +386,54 @@ describe("PinPromptDialog", () => {
     expect(screen.getByRole("button", { name: /unlock/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
   });
+
+  it("closes on Escape after the exit animation delay", () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+
+    render(
+      <PinPromptDialog
+        pinInput=""
+        onPinChange={() => {}}
+        onUnlock={() => {}}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(CLOSE_ANIMATION_DELAY);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+});
+
+describe("ScanOptionsDialog", () => {
+  it("closes on Escape after the exit animation delay", () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+
+    render(
+      <ScanOptionsDialog
+        pendingScanMode="normal"
+        organizationDraft={organizationDraft}
+        scanOptionsDraft={scanOptionsDraft}
+        scanSourceMode="saved"
+        onChangeScanOption={() => {}}
+        onChangeScanSource={() => {}}
+        onConfirm={() => {}}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(CLOSE_ANIMATION_DELAY);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -353,7 +441,6 @@ describe("PinPromptDialog", () => {
 // ---------------------------------------------------------------------------
 describe("ContextMenu", () => {
   const baseMenu = { movie: makeMovie({ title: "Action Flick", videoId: "ACT-001" }), x: 100, y: 200 };
-  const noop = () => {};
 
   it("shows the movie title in the menu", () => {
     render(
@@ -413,19 +500,6 @@ describe("ContextMenu", () => {
 // DuplicateResolutionModal
 // ---------------------------------------------------------------------------
 describe("DuplicateResolutionModal", () => {
-  function makeGroup(overrides: Partial<DuplicateGroup> = {}): DuplicateGroup {
-    return {
-      key: "group-1",
-      videoId: "DUP-001",
-      title: "Duplicate Movie",
-      files: [
-        { path: "/lib/a.mp4", resolution: "1080p", fileSize: 1000, autoSelected: true },
-        { path: "/lib/b.mp4", resolution: "1080p", fileSize: 900, autoSelected: false },
-      ],
-      ...overrides,
-    };
-  }
-
   it("shows the group count heading", () => {
     render(
       <DuplicateResolutionModal
