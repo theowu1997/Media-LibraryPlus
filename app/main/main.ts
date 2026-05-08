@@ -92,6 +92,125 @@ async function deleteMovieArtifacts(movie: MovieRecord): Promise<void> {
   await cleanupDirectoryIfEmpty(movie.folderPath);
 }
 
+function toFileUrl(filePath: string): string {
+  const normalized = path.resolve(filePath).replace(/\\/g, "/");
+  return `file:///${normalized}`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function resolveRendererEntry(): Promise<string | null> {
+  const candidates = [
+    path.join(__dirname, "../renderer/index.html"),
+    path.join(__dirname, "../../renderer/index.html"),
+    path.join(app.getAppPath(), "dist", "renderer", "index.html")
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return null;
+}
+
+async function showStartupError(window: BrowserWindow, message: string): Promise<void> {
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MLA+ Startup Error</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        background: #0f1217;
+        color: #e6edf3;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+      }
+      .card {
+        width: min(860px, 92vw);
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 20px;
+      }
+      p {
+        margin: 0 0 12px;
+        color: #9fb0c0;
+      }
+      pre {
+        margin: 0;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="card">
+      <h1>MLA+ could not start the renderer</h1>
+      <p>The app encountered a startup error instead of a blank screen.</p>
+      <pre>${escapeHtml(message)}</pre>
+    </section>
+  </body>
+</html>`;
+
+  await window.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
+}
+
+async function loadRenderer(window: BrowserWindow): Promise<void> {
+  const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+  try {
+    if (rendererUrl) {
+      await window.loadURL(rendererUrl);
+      return;
+    }
+
+    const rendererEntry = await resolveRendererEntry();
+    if (!rendererEntry) {
+      const details = [
+        "Unable to find renderer index.html.",
+        `__dirname: ${__dirname}`,
+        `appPath: ${app.getAppPath()}`,
+        `cwd: ${process.cwd()}`
+      ].join("\n");
+      writeTerminalLine(`[main:LOAD] ${details}`, process.stderr);
+      await showStartupError(window, details);
+      return;
+    }
+
+    await window.loadURL(toFileUrl(rendererEntry));
+  } catch (error) {
+    const details = `Renderer load failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`;
+    writeTerminalLine(`[main:LOAD] ${details}`, process.stderr);
+    await showStartupError(window, details);
+  }
+}
+
 function broadcastGentleState(message: string): void {
   mainWindow?.show();
   mainWindow?.focus();
@@ -126,12 +245,17 @@ function createWindow(): void {
     }
   });
 
-  const rendererUrl = process.env.ELECTRON_RENDERER_URL;
-  if (rendererUrl) {
-    void mainWindow.loadURL(rendererUrl);
-  } else {
-    void mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
-  }
+  void loadRenderer(mainWindow);
+
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedUrl) => {
+      writeTerminalLine(
+        `[renderer:LOAD_FAIL] code=${errorCode} message=${errorDescription} url=${validatedUrl}`,
+        process.stderr
+      );
+    }
+  );
 
   // Forward renderer console messages to the main process terminal for debugging
   mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
