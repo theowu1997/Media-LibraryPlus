@@ -1006,7 +1006,8 @@ export class DatabaseClient {
   }
 
   private normalizePathForLookup(sourcePath: string): string {
-    return process.platform === "win32" ? sourcePath.toLowerCase() : sourcePath;
+    const looksLikeWindowsPath = /^[a-zA-Z]:[/\\]/.test(sourcePath) || sourcePath.startsWith("\\\\");
+    return (process.platform === "win32" || looksLikeWindowsPath) ? sourcePath.toLowerCase() : sourcePath;
   }
 
   private createActressPhotoId(name: string, photoUrl: string): string {
