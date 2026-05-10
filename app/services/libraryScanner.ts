@@ -466,38 +466,63 @@ async function walkForVideos(
   rejectedFiles: ScanRejectedFile[],
   onWarning?: (warning: string) => void
 ): Promise<string[]> {
-  let entries;
-  try {
-    entries = await fs.readdir(root, {
-      withFileTypes: true
-    });
-  } catch (error) {
-    onWarning?.(`${root} - ${formatError(error)}`);
-    return [];
-  }
   const videoFiles: string[] = [];
+  const normalizeKey = (directory: string) => path.resolve(directory).toLowerCase();
+  const pendingDirs: string[] = [root];
+  const visitedDirs = new Set<string>();
 
-  for (const entry of entries) {
-    const resolved = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      if (recursive) {
-        videoFiles.push(...(await walkForVideos(resolved, true, rejectedFiles, onWarning)));
-      }
+  while (pendingDirs.length > 0) {
+    const currentDir = pendingDirs.pop()!;
+    const currentDirKey = normalizeKey(currentDir);
+    if (visitedDirs.has(currentDirKey)) {
       continue;
     }
+    visitedDirs.add(currentDirKey);
 
-    const extension = path.extname(entry.name).toLowerCase();
-    if (VIDEO_EXTENSIONS.includes(extension as (typeof VIDEO_EXTENSIONS)[number])) {
-      videoFiles.push(resolved);
-      continue;
-    }
-
-    if (KNOWN_VIDEO_EXTENSIONS.includes(extension as (typeof KNOWN_VIDEO_EXTENSIONS)[number])) {
-      rejectedFiles.push({
-        path: resolved,
-        status: "unsupported",
-        reason: `Unsupported video format "${extension}".`
+    let entries;
+    try {
+      entries = await fs.readdir(currentDir, {
+        withFileTypes: true
       });
+    } catch (error) {
+      onWarning?.(`${currentDir} - ${formatError(error)}`);
+      continue;
+    }
+
+    for (const entry of entries) {
+      const resolved = path.join(currentDir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!recursive) {
+          continue;
+        }
+
+        try {
+          const realDirectoryPath = await fs.realpath(resolved);
+          const realDirectoryKey = normalizeKey(realDirectoryPath);
+          if (visitedDirs.has(realDirectoryKey)) {
+            continue;
+          }
+          pendingDirs.push(realDirectoryPath);
+        } catch (error) {
+          onWarning?.(`${resolved} - ${formatError(error)}`);
+        }
+        continue;
+      }
+
+      const extension = path.extname(entry.name).toLowerCase();
+      if (VIDEO_EXTENSIONS.includes(extension as (typeof VIDEO_EXTENSIONS)[number])) {
+        videoFiles.push(resolved);
+        continue;
+      }
+
+      if (KNOWN_VIDEO_EXTENSIONS.includes(extension as (typeof KNOWN_VIDEO_EXTENSIONS)[number])) {
+        rejectedFiles.push({
+          path: resolved,
+          status: "unsupported",
+          reason: `Unsupported video format "${extension}".`
+        });
+      }
     }
   }
 

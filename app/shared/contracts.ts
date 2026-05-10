@@ -31,6 +31,7 @@ export interface SubtitleGenerationOptions {
   model: SubtitleGenerationModel;
   outputMode: SubtitleGenerationOutputMode;
   customFileName?: string;
+  prompt?: string;
 }
 
 export interface SubtitleGenerationResult {
@@ -231,6 +232,26 @@ export interface ScanAutomationOptions {
   addToNormalModeLibrary: boolean;
   addToGentleModeLibrary: boolean;
 }
+
+export interface ScanMonitorTuning {
+  rateEwmaAlpha: number;
+  etaMinSeconds: number;
+  etaMinProcessedFiles: number;
+  stallBaseThresholdMs: number;
+  stallMinThresholdMs: number;
+  stallMaxThresholdMs: number;
+  stallRateMultiplier: number;
+}
+
+export const DEFAULT_SCAN_MONITOR_TUNING: ScanMonitorTuning = {
+  rateEwmaAlpha: 0.2,
+  etaMinSeconds: 5,
+  etaMinProcessedFiles: 3,
+  stallBaseThresholdMs: 20000,
+  stallMinThresholdMs: 12000,
+  stallMaxThresholdMs: 45000,
+  stallRateMultiplier: 4,
+};
 
 export const VIDEO_EXTENSIONS = [
   ".3gp",

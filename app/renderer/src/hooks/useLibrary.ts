@@ -241,12 +241,6 @@ export function useLibrary({
       if (!selectedMovieIdRef.current && nextMovies.length > 0) {
         setSelectedMovieId(nextMovies[0].id);
       }
-      if (!append && nextMovies.length === 0 && !isScanningRef.current) {
-        const libraryPages = new Set(["library", "search"]);
-        setActivePage((current) =>
-          libraryPages.has(current) ? "home" : current
-        );
-      }
     });
   }
 

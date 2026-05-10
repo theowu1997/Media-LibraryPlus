@@ -3,11 +3,18 @@ import type {
   AppShellState,
   MetadataSettings,
   OrganizationSettings,
+  ScanMonitorTuning,
   ScanAutomationOptions,
 } from "../../../shared/contracts";
 import {
   DEFAULT_ORGANIZATION_SETTINGS,
 } from "../../../shared/organizationTemplates";
+import {
+  loadScanMonitorTuning,
+  normalizeScanMonitorTuning,
+  resetScanMonitorTuning,
+  saveScanMonitorTuning,
+} from "../scanMonitorSettings";
 
 type DesktopApi = NonNullable<typeof window.desktopApi>;
 
@@ -58,6 +65,8 @@ export function useSettings({ desktopApi, onStateChange, onStatus }: UseSettings
     useState<keyof OrganizationSettings>("gentlePathTemplate");
   const [scanOptionsDraft, setScanOptionsDraft] =
     useState<ScanAutomationOptions>(defaultScanOptions);
+  const [scanMonitorTuningDraft, setScanMonitorTuningDraft] =
+    useState<ScanMonitorTuning>(() => loadScanMonitorTuning());
 
   function initFromAppState(state: AppShellState): void {
     setMetadataDraft(state.metadataSettings);
@@ -155,6 +164,19 @@ export function useSettings({ desktopApi, onStateChange, onStatus }: UseSettings
     setOrganizationDraft(preset);
   }
 
+  function handleSaveScanMonitorTuning(): void {
+    const normalized = normalizeScanMonitorTuning(scanMonitorTuningDraft);
+    setScanMonitorTuningDraft(normalized);
+    saveScanMonitorTuning(normalized);
+    onStatus("Scan monitor tuning saved. Real-time monitor now uses your custom thresholds.");
+  }
+
+  function handleResetScanMonitorTuning(): void {
+    const defaults = resetScanMonitorTuning();
+    setScanMonitorTuningDraft(defaults);
+    onStatus("Scan monitor tuning reset to defaults.");
+  }
+
   return {
     // State
     metadataDraft, setMetadataDraft,
@@ -162,11 +184,14 @@ export function useSettings({ desktopApi, onStateChange, onStatus }: UseSettings
     themeModeDraft, setThemeModeDraft,
     focusedOrganizationField, setFocusedOrganizationField,
     scanOptionsDraft, setScanOptionsDraft,
+    scanMonitorTuningDraft, setScanMonitorTuningDraft,
     // Functions
     initFromAppState,
     handleSaveThemeMode,
     handleSaveMetadataSettings,
     handleSaveOrganizationSettings,
+    handleSaveScanMonitorTuning,
+    handleResetScanMonitorTuning,
     insertOrganizationToken,
     applyOrganizationPreset,
   };

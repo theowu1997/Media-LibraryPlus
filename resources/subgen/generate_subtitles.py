@@ -103,6 +103,7 @@ def main() -> int:
     parser.add_argument("--model", default="medium")
     parser.add_argument("--language", default=None)
     parser.add_argument("--translate-to", choices=["en", "zh", "km"], default=None)
+    parser.add_argument("--prompt", default=None, help="Initial prompt to guide transcription")
     args = parser.parse_args()
 
     device = "cpu"
@@ -114,6 +115,7 @@ def main() -> int:
         task="transcribe",
         vad_filter=True,
         beam_size=5,
+        initial_prompt=args.prompt,
     )
     segment_list = list(segments)
     detected_language = normalize_whisper_language(getattr(info, "language", None))

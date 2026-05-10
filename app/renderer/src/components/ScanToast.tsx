@@ -5,6 +5,11 @@ interface ScanToastProps {
   isScanning: boolean;
   progressPercent: number;
   scanStageLabel: string;
+  activeFileName: string | null;
+  scanElapsedLabel: string;
+  scanEtaLabel: string;
+  scanRateLabel: string;
+  isScanStalled: boolean;
   onCancel: () => void;
   onDismiss: () => void;
 }
@@ -14,6 +19,11 @@ export function ScanToast({
   isScanning,
   progressPercent,
   scanStageLabel,
+  activeFileName,
+  scanElapsedLabel,
+  scanEtaLabel,
+  scanRateLabel,
+  isScanStalled,
   onCancel,
   onDismiss,
 }: ScanToastProps) {
@@ -23,7 +33,7 @@ export function ScanToast({
         <span className="scan-toast-label">
           {isScanning ? "⏳ Scanning…" : "✅ Scan complete"}
         </span>
-        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+        <div className="scan-toast-actions">
           {isScanning && (
             <button
               className="scan-toast-stop"
@@ -43,7 +53,11 @@ export function ScanToast({
         </div>
       </div>
       <div className="scan-toast-bar-track">
-        <div className="scan-toast-bar-fill" style={{ width: `${progressPercent}%` }} />
+        <progress
+          className="scan-toast-bar-fill"
+          max={100}
+          value={progressPercent}
+        />
       </div>
       <div className="scan-toast-info">
         <span className="scan-toast-pct">{progressPercent}%</span>
@@ -52,6 +66,15 @@ export function ScanToast({
         </span>
         <span className="scan-toast-msg">{scanStageLabel}</span>
       </div>
+      <div className="scan-toast-meta">
+        <span>{scanElapsedLabel} elapsed</span>
+        <span>{scanRateLabel}</span>
+        <span>{scanEtaLabel}</span>
+        <span className={isScanStalled ? "scan-health stalled" : "scan-health live"}>
+          {isScanStalled ? "Waiting for file I/O" : "Live"}
+        </span>
+      </div>
+      {activeFileName && <code className="scan-toast-file" title={scanProgress.currentFile ?? ""}>{activeFileName}</code>}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import type {
   MetadataSettings,
   OrganizationSettings,
   PlayerSettings,
+  ScanMonitorTuning,
   SubtitleScanResult,
 } from "../../../shared/contracts";
 import {
@@ -44,6 +45,12 @@ interface SettingsPageProps {
   setPlayerVolume: (v: number) => void;
   onSavePlayerSettings: () => Promise<void>;
 
+  // scan monitor tuning
+  scanMonitorTuningDraft: ScanMonitorTuning;
+  setScanMonitorTuningDraft: React.Dispatch<React.SetStateAction<ScanMonitorTuning>>;
+  onSaveScanMonitorTuning: () => void;
+  onResetScanMonitorTuning: () => void;
+
   // subtitle dirs
   subtitleScanRunning: boolean;
   subtitleScanResult: SubtitleScanResult | null;
@@ -75,6 +82,10 @@ export function SettingsPage({
   setPlayerSettings,
   setPlayerVolume,
   onSavePlayerSettings,
+  scanMonitorTuningDraft,
+  setScanMonitorTuningDraft,
+  onSaveScanMonitorTuning,
+  onResetScanMonitorTuning,
   subtitleScanRunning,
   subtitleScanResult,
   onAddSubtitleDir,
@@ -118,7 +129,7 @@ export function SettingsPage({
             Get your token from{" "}
             <a
               href="https://developer.themoviedb.org/docs/getting-started"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               target="_blank"
             >
               TMDB Getting Started
@@ -510,7 +521,7 @@ export function SettingsPage({
               >
                 Save unlock shortcut
               </button>
-              {gentleSaveStatus && <span style={{ marginLeft: 12 }}>{gentleSaveStatus}</span>}
+              {gentleSaveStatus && <span className="settings-inline-status">{gentleSaveStatus}</span>}
             </div>
           </div>
         </div>
@@ -572,19 +583,19 @@ export function SettingsPage({
                 onChange={(e) => setPlayerSettings((s) => ({ ...s, subtitleColor: e.target.value }))}
               />
             </label>
-            <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <label className="inline-toggle-label">
               <input
                 type="checkbox" checked={playerSettings.autoPlayNext}
                 onChange={(e) => setPlayerSettings((s) => ({ ...s, autoPlayNext: e.target.checked }))}
               />
-              Auto-play next movie
+              <span>Auto-play next movie</span>
             </label>
-            <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <label className="inline-toggle-label">
               <input
                 type="checkbox" checked={playerSettings.rememberPosition}
                 onChange={(e) => setPlayerSettings((s) => ({ ...s, rememberPosition: e.target.checked }))}
               />
-              Remember playback position
+              <span>Remember playback position</span>
             </label>
             <label>
               Video filter preset
@@ -633,6 +644,144 @@ export function SettingsPage({
           </div>
         </div>
 
+        <div className="panel">
+          <p className="eyebrow">Scan monitor</p>
+          <h3>Real-time monitor tuning</h3>
+          <p className="subtle">
+            Tune ETA stability and stall sensitivity for your storage speed and library profile.
+          </p>
+          <div className="settings-form">
+            <label>
+              Rate smoothing ({scanMonitorTuningDraft.rateEwmaAlpha.toFixed(2)})
+              <input
+                type="range"
+                min={0.05}
+                max={0.5}
+                step={0.01}
+                value={scanMonitorTuningDraft.rateEwmaAlpha}
+                onChange={(e) =>
+                  setScanMonitorTuningDraft((current) => ({
+                    ...current,
+                    rateEwmaAlpha: Number(e.target.value),
+                  }))
+                }
+              />
+            </label>
+            <label>
+              ETA minimum elapsed seconds ({scanMonitorTuningDraft.etaMinSeconds}s)
+              <input
+                type="range"
+                min={0}
+                max={45}
+                step={1}
+                value={scanMonitorTuningDraft.etaMinSeconds}
+                onChange={(e) =>
+                  setScanMonitorTuningDraft((current) => ({
+                    ...current,
+                    etaMinSeconds: Number(e.target.value),
+                  }))
+                }
+              />
+            </label>
+            <label>
+              ETA minimum processed files ({scanMonitorTuningDraft.etaMinProcessedFiles})
+              <input
+                type="range"
+                min={1}
+                max={50}
+                step={1}
+                value={scanMonitorTuningDraft.etaMinProcessedFiles}
+                onChange={(e) =>
+                  setScanMonitorTuningDraft((current) => ({
+                    ...current,
+                    etaMinProcessedFiles: Number(e.target.value),
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Stall base threshold ({Math.round(scanMonitorTuningDraft.stallBaseThresholdMs / 1000)}s)
+              <input
+                type="range"
+                min={5000}
+                max={60000}
+                step={1000}
+                value={scanMonitorTuningDraft.stallBaseThresholdMs}
+                onChange={(e) =>
+                  setScanMonitorTuningDraft((current) => ({
+                    ...current,
+                    stallBaseThresholdMs: Number(e.target.value),
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Stall minimum threshold ({Math.round(scanMonitorTuningDraft.stallMinThresholdMs / 1000)}s)
+              <input
+                type="range"
+                min={5000}
+                max={60000}
+                step={1000}
+                value={scanMonitorTuningDraft.stallMinThresholdMs}
+                onChange={(e) =>
+                  setScanMonitorTuningDraft((current) => ({
+                    ...current,
+                    stallMinThresholdMs: Number(e.target.value),
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Stall maximum threshold ({Math.round(scanMonitorTuningDraft.stallMaxThresholdMs / 1000)}s)
+              <input
+                type="range"
+                min={5000}
+                max={90000}
+                step={1000}
+                value={scanMonitorTuningDraft.stallMaxThresholdMs}
+                onChange={(e) =>
+                  setScanMonitorTuningDraft((current) => ({
+                    ...current,
+                    stallMaxThresholdMs: Number(e.target.value),
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Stall rate multiplier ({scanMonitorTuningDraft.stallRateMultiplier.toFixed(1)}x)
+              <input
+                type="range"
+                min={1}
+                max={8}
+                step={0.1}
+                value={scanMonitorTuningDraft.stallRateMultiplier}
+                onChange={(e) =>
+                  setScanMonitorTuningDraft((current) => ({
+                    ...current,
+                    stallRateMultiplier: Number(e.target.value),
+                  }))
+                }
+              />
+            </label>
+            <div className="inline-actions">
+              <button
+                className="primary-button"
+                type="button"
+                onClick={onSaveScanMonitorTuning}
+              >
+                Save monitor tuning
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={onResetScanMonitorTuning}
+              >
+                Reset defaults
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* ── System ── */}
         <div className="panel">
           <p className="eyebrow">System</p>
@@ -669,15 +818,15 @@ export function SettingsPage({
         {/* ── Subtitle Directories ── */}
         <div className="panel">
           <p className="eyebrow">Subtitle folders</p>
-          <p className="subtle" style={{ marginBottom: "0.75rem" }}>
+          <p className="subtle subtitle-dirs-help">
             Add folders that contain .srt / .ass / .vtt files. "Scan subtitles" will match them
             to movies in your library by video ID and import them automatically.
           </p>
-          <ul className="plain-list" style={{ marginBottom: "0.75rem" }}>
+          <ul className="plain-list subtitle-dir-list">
             {appState.subtitleDirs.length > 0 ? (
               appState.subtitleDirs.map((dir) => (
-                <li key={dir} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <span style={{ flex: 1, wordBreak: "break-all" }}>{dir}</span>
+                <li key={dir} className="subtitle-dir-item">
+                  <span className="subtitle-dir-path">{dir}</span>
                   <button
                     className="ghost-button"
                     type="button"
@@ -689,7 +838,7 @@ export function SettingsPage({
               <li className="muted-inline">No subtitle directories configured.</li>
             )}
           </ul>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+          <div className="subtitle-dir-actions">
             <button
               className="secondary-button"
               type="button"
@@ -709,7 +858,7 @@ export function SettingsPage({
           {subtitleScanResult && (
             <div className="subtitle-scan-result">
               <strong>Scan complete</strong> — {subtitleScanResult.total} files found ·{" "}
-              <span style={{ color: "var(--success, #4caf50)" }}>{subtitleScanResult.matched} matched</span> ·{" "}
+              <span className="subtitle-scan-matched">{subtitleScanResult.matched} matched</span> ·{" "}
               {subtitleScanResult.unmatched} unmatched · {subtitleScanResult.skipped} skipped
             </div>
           )}

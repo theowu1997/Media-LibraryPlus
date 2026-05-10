@@ -433,14 +433,17 @@ async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenera
         ? path.join(movie.folderPath, `${sanitizeSubtitleFileName(options.customFileName ?? "")}.srt`)
       : targetPath;
 
-  const args = [scriptPath, "--input", movie.sourcePath, "--output", finalTargetPath, "--model", options.model];
-  if (options.language === "translate-en") {
-    args.push("--translate-to", "en");
-  } else if (options.language === "translate-zh") {
-    args.push("--translate-to", "zh");
-  } else if (options.language === "translate-km") {
-    args.push("--translate-to", "km");
-  }
+   const args = [scriptPath, "--input", movie.sourcePath, "--output", finalTargetPath, "--model", options.model];
+   if (options.language === "translate-en") {
+     args.push("--translate-to", "en");
+   } else if (options.language === "translate-zh") {
+     args.push("--translate-to", "zh");
+   } else if (options.language === "translate-km") {
+     args.push("--translate-to", "km");
+   }
+   if (options.prompt) {
+     args.push("--prompt", options.prompt);
+   }
 
   return new Promise<SubtitleGenerationResult>((resolve) => {
     const child = spawn("python", args, {
