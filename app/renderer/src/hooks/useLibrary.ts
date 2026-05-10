@@ -221,6 +221,22 @@ export function useLibrary({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktopApi, isScanning]);
 
+  useEffect(() => {
+    if (!desktopApi) {
+      return;
+    }
+
+    const handlePosterRecoveryComplete = () => {
+      void refreshPostersOnly();
+    };
+
+    window.addEventListener("mla:poster-recovery-complete", handlePosterRecoveryComplete);
+    return () => {
+      window.removeEventListener("mla:poster-recovery-complete", handlePosterRecoveryComplete);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopApi]);
+
   async function refreshMovies(query?: string, append = false): Promise<void> {
     if (!desktopApi) return;
 

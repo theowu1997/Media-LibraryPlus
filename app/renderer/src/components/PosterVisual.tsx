@@ -1,6 +1,8 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import type { MovieRecord } from "../../../shared/contracts";
 
+const posterRecoveryAttempted = new Set<string>();
+
 function normalizePosterUrl(posterUrl: string | null): string | null {
   if (!posterUrl) {
     return null;
@@ -55,6 +57,24 @@ export const PosterVisual = memo(function PosterVisual(props: {
       ? "poster-visual compact"
       : "poster-visual";
 
+  const handleImageError = (): void => {
+    setImageLoadFailed(true);
+
+    if (!window.desktopApi || posterRecoveryAttempted.has(movie.id)) {
+      return;
+    }
+
+    posterRecoveryAttempted.add(movie.id);
+    void window.desktopApi
+      .refreshMoviePosters([movie.id])
+      .then((summary) => {
+        if (summary.updated > 0) {
+          window.dispatchEvent(new Event("mla:poster-recovery-complete"));
+        }
+      })
+      .catch(() => undefined);
+  };
+
   return (
     <div className={className}>
       {posterSrc && !imageLoadFailed ? (
@@ -62,7 +82,7 @@ export const PosterVisual = memo(function PosterVisual(props: {
           alt={movie.title}
           className="poster-image"
           loading="lazy"
-          onError={() => setImageLoadFailed(true)}
+          onError={handleImageError}
           src={posterSrc}
         />
       ) : (

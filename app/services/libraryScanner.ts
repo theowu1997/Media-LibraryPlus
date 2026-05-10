@@ -326,9 +326,10 @@ export async function scanLibraries(
           reason: validation.reason,
           status: validation.status
         });
-        errors.push(
-          `${candidate.mode}:${candidate.videoFile} - ${validation.reason}`
-        );
+        const errorMsg = `${candidate.mode}:${candidate.videoFile} - ${validation.reason}`;
+        errors.push(errorMsg);
+        // eslint-disable-next-line no-console
+        console.log(`[scanner] VALIDATION REJECTED: ${errorMsg}`);
         processedFiles += 1;
         continue;
       }
