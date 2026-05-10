@@ -473,7 +473,14 @@ async function walkForVideos(
 
   while (pendingDirs.length > 0) {
     const currentDir = pendingDirs.pop()!;
-    const currentDirKey = normalizeKey(currentDir);
+    let realCurrentDir = currentDir;
+    try {
+      realCurrentDir = await fs.realpath(currentDir);
+    } catch {
+      // Fall back to the path we already have.
+    }
+
+    const currentDirKey = normalizeKey(realCurrentDir);
     if (visitedDirs.has(currentDirKey)) {
       continue;
     }
@@ -481,32 +488,27 @@ async function walkForVideos(
 
     let entries;
     try {
-      entries = await fs.readdir(currentDir, {
+      entries = await fs.readdir(realCurrentDir, {
         withFileTypes: true
       });
     } catch (error) {
-      onWarning?.(`${currentDir} - ${formatError(error)}`);
+      onWarning?.(`${realCurrentDir} - ${formatError(error)}`);
       continue;
     }
 
     for (const entry of entries) {
-      const resolved = path.join(currentDir, entry.name);
+      const resolved = path.join(realCurrentDir, entry.name);
 
       if (entry.isDirectory()) {
         if (!recursive) {
           continue;
         }
 
-        try {
-          const realDirectoryPath = await fs.realpath(resolved);
-          const realDirectoryKey = normalizeKey(realDirectoryPath);
-          if (visitedDirs.has(realDirectoryKey)) {
-            continue;
-          }
-          pendingDirs.push(realDirectoryPath);
-        } catch (error) {
-          onWarning?.(`${resolved} - ${formatError(error)}`);
+        if (entry.isSymbolicLink()) {
+          continue;
         }
+
+        pendingDirs.push(resolved);
         continue;
       }
 
