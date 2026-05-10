@@ -60,6 +60,31 @@ const pages: { id: AppPage; label: string }[] = [
 
 const PAGE_SIZE = 200;
 
+interface SelectionBoxRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+function SelectionBoxOverlay({ box }: { box: SelectionBoxRect }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const element = boxRef.current;
+    if (!element) {
+      return;
+    }
+
+    element.style.left = `${box.left}px`;
+    element.style.top = `${box.top}px`;
+    element.style.width = `${box.width}px`;
+    element.style.height = `${box.height}px`;
+  }, [box.height, box.left, box.top, box.width]);
+
+  return <div ref={boxRef} className="selection-box" />;
+}
+
 
 
 
@@ -100,10 +125,13 @@ export function App() {
     themeModeDraft, setThemeModeDraft,
     focusedOrganizationField, setFocusedOrganizationField,
     scanOptionsDraft, setScanOptionsDraft,
+    scanMonitorTuningDraft, setScanMonitorTuningDraft,
     initFromAppState,
     handleSaveThemeMode,
     handleSaveMetadataSettings,
     handleSaveOrganizationSettings,
+    handleSaveScanMonitorTuning,
+    handleResetScanMonitorTuning,
     insertOrganizationToken,
     applyOrganizationPreset,
   } = settings;
@@ -119,10 +147,16 @@ export function App() {
     recentProcessedFiles,
     subtitleScanRunning, setSubtitleScanRunning,
     subtitleScanResult, setSubtitleScanResult,
+    activeFileName,
+    scanElapsedLabel,
+    scanEtaLabel,
+    scanRateLabel,
+    isScanStalled,
     isScanning, progressPercent, scanStageLabel,
   } = useScanProgress({
     desktopApi,
     onScanRefresh: () => refreshMoviesRef.current(),
+    scanMonitorTuning: scanMonitorTuningDraft,
   });
 
   const {
@@ -494,7 +528,12 @@ export function App() {
           onCancelScan={() => void desktopApi?.cancelScan()}
           gentleUnlocked={appState?.gentleUnlocked ?? false}
           scanProgress={scanProgress}
+          activeFileName={activeFileName}
           scanStageLabel={scanStageLabel}
+          scanElapsedLabel={scanElapsedLabel}
+          scanEtaLabel={scanEtaLabel}
+          scanRateLabel={scanRateLabel}
+          isScanStalled={isScanStalled}
           lastScanSummaryInvalidFiles={lastScanSummary?.invalidFiles ?? []}
           getRejectedStatusLabel={getRejectedStatusLabel}
         />
@@ -683,6 +722,10 @@ export function App() {
             setPlayerSettings={setPlayerSettings}
             setPlayerVolume={setPlayerVolume}
             onSavePlayerSettings={handleSavePlayerSettings}
+            scanMonitorTuningDraft={scanMonitorTuningDraft}
+            setScanMonitorTuningDraft={setScanMonitorTuningDraft}
+            onSaveScanMonitorTuning={handleSaveScanMonitorTuning}
+            onResetScanMonitorTuning={handleResetScanMonitorTuning}
             subtitleScanRunning={subtitleScanRunning}
             subtitleScanResult={subtitleScanResult}
             onAddSubtitleDir={handleAddSubtitleDir}
@@ -715,15 +758,7 @@ export function App() {
       )}
 
       {selectionBox && (
-        <div
-          className="selection-box"
-          style={{
-            height: selectionBox.height,
-            left: selectionBox.left,
-            top: selectionBox.top,
-            width: selectionBox.width
-          }}
-        />
+        <SelectionBoxOverlay box={selectionBox} />
       )}
 
       {contextMenu && (
@@ -791,6 +826,11 @@ export function App() {
           isScanning={isScanning}
           progressPercent={progressPercent}
           scanStageLabel={scanStageLabel}
+          activeFileName={activeFileName}
+          scanElapsedLabel={scanElapsedLabel}
+          scanEtaLabel={scanEtaLabel}
+          scanRateLabel={scanRateLabel}
+          isScanStalled={isScanStalled}
           onCancel={() => void desktopApi?.cancelScan()}
           onDismiss={() => setScanProgress(null)}
         />

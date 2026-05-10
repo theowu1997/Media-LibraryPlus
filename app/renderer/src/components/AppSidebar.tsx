@@ -66,15 +66,11 @@ export const AppSidebar = memo(function AppSidebar({
 
           <nav className="nav">
             {pages.map((page) => {
-              const requiresLibrary = page.id === "library" || page.id === "search";
-              const isDisabled = requiresLibrary && movies.length === 0;
               return (
                 <button
                   key={page.id}
                   className={page.id === activePage ? "nav-link active" : "nav-link"}
-                  onClick={() => { if (!isDisabled) onNavigate(page.id); }}
-                  disabled={isDisabled}
-                  title={isDisabled ? "Scan your library first to access this page" : undefined}
+                  onClick={() => onNavigate(page.id)}
                   type="button"
                 >
                   {page.label}

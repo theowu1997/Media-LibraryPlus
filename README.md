@@ -108,6 +108,8 @@ Typical behavior:
 - Search online subtitles from SubtitleCat
 - Download subtitles in the selected language
 - Apply downloaded subtitles in the built-in player
+- Generate local subtitles from the Sub-Gen page using Faster-Whisper
+- Optionally provide a transcription prompt and use Enhance to inject title, actress names, keywords, and video ID context before generation
 
 ## Gentle Mode
 

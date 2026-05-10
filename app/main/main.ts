@@ -25,6 +25,7 @@ import type {
   SubtitleGenerationOptions,
   SubtitleGenerationResult
 } from "../shared/contracts";
+import { extractVideoId } from "../shared/videoId";
 
 let mainWindow: BrowserWindow | null = null;
 let database: DatabaseClient;
@@ -391,6 +392,74 @@ function sanitizeSubtitleFileName(value: string): string {
   return sanitized || "subtitle";
 }
 
+const SUBTITLE_FILE_EXTENSIONS = new Set([".srt", ".vtt", ".ass", ".ssa"]);
+
+function extractSubtitleLanguageFromName(filePath: string): string {
+  const stem = path.basename(filePath, path.extname(filePath));
+  const segments = stem.split(".");
+  const candidate = segments[segments.length - 1]?.trim();
+  if (candidate && candidate.length >= 2 && candidate.length <= 5) {
+    return candidate.toUpperCase();
+  }
+
+  return "UND";
+}
+
+async function walkSubtitleFiles(root: string): Promise<string[]> {
+  const files: string[] = [];
+  const pending: string[] = [root];
+  const visited = new Set<string>();
+
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+
+    let realCurrent = current;
+    try {
+      realCurrent = await fs.realpath(current);
+    } catch {
+      // Fall back to current path if realpath fails.
+    }
+
+    const key = path.resolve(realCurrent).toLowerCase();
+    if (visited.has(key)) {
+      continue;
+    }
+    visited.add(key);
+
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.readdir(realCurrent, {
+        withFileTypes: true
+      });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const resolved = path.join(realCurrent, entry.name);
+
+      if (entry.isDirectory()) {
+        if (entry.isSymbolicLink()) {
+          continue;
+        }
+        pending.push(resolved);
+        continue;
+      }
+
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const extension = path.extname(entry.name).toLowerCase();
+      if (SUBTITLE_FILE_EXTENSIONS.has(extension)) {
+        files.push(resolved);
+      }
+    }
+  }
+
+  return files;
+}
+
 async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenerationOptions): Promise<SubtitleGenerationResult> {
   const scriptPath = resolveSubGenScriptPath();
   try {
@@ -433,14 +502,17 @@ async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenera
         ? path.join(movie.folderPath, `${sanitizeSubtitleFileName(options.customFileName ?? "")}.srt`)
       : targetPath;
 
-  const args = [scriptPath, "--input", movie.sourcePath, "--output", finalTargetPath, "--model", options.model];
-  if (options.language === "translate-en") {
-    args.push("--translate-to", "en");
-  } else if (options.language === "translate-zh") {
-    args.push("--translate-to", "zh");
-  } else if (options.language === "translate-km") {
-    args.push("--translate-to", "km");
-  }
+   const args = [scriptPath, "--input", movie.sourcePath, "--output", finalTargetPath, "--model", options.model];
+   if (options.language === "translate-en") {
+     args.push("--translate-to", "en");
+   } else if (options.language === "translate-zh") {
+     args.push("--translate-to", "zh");
+   } else if (options.language === "translate-km") {
+     args.push("--translate-to", "km");
+   }
+   if (options.prompt) {
+     args.push("--prompt", options.prompt);
+   }
 
   return new Promise<SubtitleGenerationResult>((resolve) => {
     const child = spawn("python", args, {
@@ -1097,6 +1169,80 @@ function registerHandlers(): void {
     // Convert Windows backslashes and return file:// URL for the renderer
     const normalized = filePath.replace(/\\/g, "/");
     return `file:///${normalized}`;
+  });
+
+  ipcMain.handle("subtitle:addDir", async (): Promise<AppShellState> => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: "Choose subtitle folder",
+      properties: ["openDirectory", "createDirectory"]
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      const current = database.getSubtitleDirs();
+      const next = Array.from(new Set([...current, ...result.filePaths]));
+      database.setSubtitleDirs(next);
+    }
+
+    return buildShellState();
+  });
+
+  ipcMain.handle("subtitle:removeDir", async (_event, dir: string): Promise<AppShellState> => {
+    const target = path.resolve(dir).toLowerCase();
+    const next = database
+      .getSubtitleDirs()
+      .filter((entry) => path.resolve(entry).toLowerCase() !== target);
+    database.setSubtitleDirs(next);
+    return buildShellState();
+  });
+
+  ipcMain.handle("subtitle:scan", async (): Promise<{ total: number; matched: number; skipped: number; unmatched: number }> => {
+    const subtitleDirs = database.getSubtitleDirs();
+    let total = 0;
+    let matched = 0;
+    let skipped = 0;
+    let unmatched = 0;
+
+    for (const subtitleDir of subtitleDirs) {
+      let subtitleFiles: string[] = [];
+      try {
+        subtitleFiles = await walkSubtitleFiles(subtitleDir);
+      } catch {
+        skipped += 1;
+        continue;
+      }
+
+      for (const subtitlePath of subtitleFiles) {
+        total += 1;
+
+        try {
+          const stem = path.basename(subtitlePath, path.extname(subtitlePath));
+          const videoId = extractVideoId(stem);
+          if (!videoId) {
+            unmatched += 1;
+            continue;
+          }
+
+          const movie = database.getMovieByVideoId(videoId);
+          if (!movie) {
+            unmatched += 1;
+            continue;
+          }
+
+          const language = extractSubtitleLanguageFromName(subtitlePath);
+          database.upsertSubtitle(movie.id, subtitlePath, language);
+          matched += 1;
+        } catch {
+          skipped += 1;
+        }
+      }
+    }
+
+    return {
+      total,
+      matched,
+      skipped,
+      unmatched
+    };
   });
 
   ipcMain.handle("subtitle:generateForMovie", async (_event, movieId: string, options: SubtitleGenerationOptions): Promise<SubtitleGenerationResult> => {

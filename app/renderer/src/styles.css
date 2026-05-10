@@ -1103,6 +1103,30 @@ code {
   color: rgba(255, 255, 255, 0.92);
 }
 
+.poster-fallback.poster-tone-0 {
+  background: linear-gradient(145deg, #203a5f, #14212f);
+}
+
+.poster-fallback.poster-tone-1 {
+  background: linear-gradient(145deg, #5f2a20, #301711);
+}
+
+.poster-fallback.poster-tone-2 {
+  background: linear-gradient(145deg, #24493a, #13281f);
+}
+
+.poster-fallback.poster-tone-3 {
+  background: linear-gradient(145deg, #4f2c57, #231327);
+}
+
+.poster-fallback.poster-tone-4 {
+  background: linear-gradient(145deg, #5a4a21, #2e250f);
+}
+
+.poster-fallback.poster-tone-5 {
+  background: linear-gradient(145deg, #37495d, #172230);
+}
+
 .poster-fallback-content {
   position: relative;
   z-index: 1;
@@ -2866,6 +2890,12 @@ kbd {
   gap: 0.5rem;
 }
 
+.scan-toast-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
 .scan-toast-label {
   font-size: 0.78rem;
   font-weight: 600;
@@ -2906,15 +2936,34 @@ kbd {
 }
 
 .scan-toast-bar-fill {
+  width: 100%;
   height: 100%;
+  border-radius: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+.scan-toast-bar-fill::-webkit-progress-bar {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: inherit;
+}
+
+.scan-toast-bar-fill::-webkit-progress-value {
   border-radius: inherit;
   background: linear-gradient(90deg, var(--secondary), var(--primary));
   background-size: 200% 100%;
-  transition: width 250ms ease;
   animation: progress-shimmer 1.8s linear infinite;
+  transition: width 250ms ease;
 }
 
-.scan-toast.done .scan-toast-bar-fill {
+.scan-toast-bar-fill::-moz-progress-bar {
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--secondary), var(--primary));
+}
+
+.scan-toast.done .scan-toast-bar-fill::-webkit-progress-value,
+.scan-toast.done .scan-toast-bar-fill::-moz-progress-bar {
   background: #2ecc71;
 }
 
@@ -2950,6 +2999,30 @@ kbd {
   letter-spacing: 0.06em;
 }
 
+.scan-toast-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  font-size: 0.67rem;
+  color: var(--muted);
+}
+
+.scan-toast-meta span {
+  padding: 0.14rem 0.38rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.scan-toast-file {
+  font-size: 0.68rem;
+  color: var(--text);
+  opacity: 0.84;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Compact inline scan summary in settings */
 .scan-inline-summary {
   padding: 0.6rem 1rem;
@@ -2981,6 +3054,25 @@ kbd {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.scan-health {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.scan-health.live {
+  background: rgba(46, 204, 113, 0.18);
+  color: #9ef0c2;
+}
+
+.scan-health.stalled {
+  background: rgba(255, 184, 77, 0.18);
+  color: #ffd394;
 }
 
 .scan-stop-btn {
@@ -3019,6 +3111,46 @@ kbd {
 .scan-restart-btn:hover {
   background: rgba(46, 204, 113, 0.22);
   transform: scale(1.03);
+}
+
+.settings-inline-status {
+  margin-left: 12px;
+}
+
+.inline-toggle-label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.subtitle-dirs-help {
+  margin-bottom: 0.75rem;
+}
+
+.subtitle-dir-list {
+  margin-bottom: 0.75rem;
+}
+
+.subtitle-dir-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.subtitle-dir-path {
+  flex: 1;
+  word-break: break-all;
+}
+
+.subtitle-dir-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.subtitle-scan-matched {
+  color: var(--success, #4caf50);
 }
 
 /* Load more bar */
@@ -3289,4 +3421,16 @@ kbd {
 .dup-resolve-btn:hover {
   background: rgba(46, 204, 113, 0.18);
   border-color: #2ecc71;
+}
+
+.prompt-input-row {
+  display: flex;
+  gap: var(--gap-sm);
+  align-items: flex-start;
+}
+
+.prompt-input-row .search-input {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
 }

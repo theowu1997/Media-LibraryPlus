@@ -14,7 +14,12 @@ interface AppTopBarProps {
   onCancelScan: () => void;
   gentleUnlocked: boolean;
   scanProgress: ScanProgress | null;
+  activeFileName: string | null;
   scanStageLabel: string;
+  scanElapsedLabel: string;
+  scanEtaLabel: string;
+  scanRateLabel: string;
+  isScanStalled: boolean;
   lastScanSummaryInvalidFiles: InvalidFileEntry[];
   getRejectedStatusLabel: (status: "incomplete" | "corrupt" | "invalid" | "unsupported") => string;
 }
@@ -27,7 +32,12 @@ export function AppTopBar({
   onCancelScan,
   gentleUnlocked,
   scanProgress,
+  activeFileName,
   scanStageLabel,
+  scanElapsedLabel,
+  scanEtaLabel,
+  scanRateLabel,
+  isScanStalled,
   lastScanSummaryInvalidFiles,
   getRejectedStatusLabel: rejectedLabel,
 }: AppTopBarProps) {
@@ -77,7 +87,13 @@ export function AppTopBar({
           <div className="scan-inline-row">
             <span className={isScanning ? "monitor-status active" : "monitor-status"}>{scanStageLabel}</span>
             <span>{scanProgress.imported} imported · {scanProgress.skipped} skipped · {scanProgress.totalFiles} total</span>
-            {scanProgress.currentFile && <code className="scan-inline-file">{scanProgress.currentFile}</code>}
+            <span>{scanElapsedLabel} elapsed</span>
+            <span>{scanRateLabel}</span>
+            <span className={isScanStalled ? "scan-health stalled" : "scan-health live"}>
+              {isScanStalled ? "Waiting for file I/O" : "Live"}
+            </span>
+            <span>{scanEtaLabel}</span>
+            {activeFileName && <code className="scan-inline-file" title={scanProgress.currentFile ?? ""}>{activeFileName}</code>}
           </div>
         </section>
       )}

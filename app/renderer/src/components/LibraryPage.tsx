@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import type { LibraryMode, MovieRecord } from "../../../shared/contracts";
 import { MovieTile } from "./MovieTile";
@@ -64,6 +64,9 @@ export function LibraryPage({
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const scanMenuRef = useRef<HTMLDivElement | null>(null);
   const [showScanMenu, setShowScanMenu] = useState(false);
+  const visibleMissingPosterIds = sortedMovies
+    .filter((movie) => !movie.posterUrl)
+    .map((movie) => movie.id);
 
   useEffect(() => {
     if (movies.length >= movieTotalCount) {
@@ -112,6 +115,15 @@ export function LibraryPage({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [showScanMenu]);
 
+  useEffect(() => {
+    const gridElement = gridRef.current;
+    if (!gridElement) {
+      return;
+    }
+
+    gridElement.style.setProperty("--cols", String(gridColumns));
+  }, [gridColumns, gridRef]);
+
   return (
     <section className="page library-page">
       <div className="library-shell">
@@ -130,6 +142,7 @@ export function LibraryPage({
               <div className="columns-control">
                 <span>Sort</span>
                 <select
+                  aria-label="Sort movies"
                   className="filter-select"
                   value={sortMode}
                   onChange={(e) => setSortMode(e.target.value as SortMode)}
@@ -218,6 +231,15 @@ export function LibraryPage({
               </button>
               <button
                 className="ghost-button"
+                disabled={isScanning || visibleMissingPosterIds.length === 0}
+                onClick={() => void handleRefreshSelectedPosters(visibleMissingPosterIds)}
+                type="button"
+                title="Regenerate posters for currently visible tiles that still do not have posters"
+              >
+                Rehydrate visible missing posters
+              </button>
+              <button
+                className="ghost-button"
                 onClick={() => void handleBatchMove("normal")}
                 type="button"
               >
@@ -239,7 +261,6 @@ export function LibraryPage({
             className="movie-grid"
             onMouseDown={handleGridMouseDown}
             ref={gridRef}
-            style={{ "--cols": gridColumns } as CSSProperties}
           >
             {sortedMovies.map((movie) => (
               <MovieTile

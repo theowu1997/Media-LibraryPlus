@@ -22,6 +22,7 @@ export function SearchPage({ movies, setSelectedMovieId, setActivePage, onSubtit
   const [model, setModel] = useState<SubtitleGenerationModel>("medium");
   const [outputMode, setOutputMode] = useState<SubtitleGenerationOutputMode>("library-default");
   const [customFileName, setCustomFileName] = useState("subtitle");
+  const [prompt, setPrompt] = useState("");
   const [status, setStatus] = useState<SubtitleGenerationResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [batchMessage, setBatchMessage] = useState<string>("");
@@ -29,6 +30,25 @@ export function SearchPage({ movies, setSelectedMovieId, setActivePage, onSubtit
     () => movies.find((movie) => movie.id === selectedMovieId) ?? null,
     [movies, selectedMovieId]
   );
+
+  function enhancePrompt(base: string): string {
+    if (!selectedMovie) return base;
+    const contextParts: string[] = [selectedMovie.title];
+    if (selectedMovie.actresses.length > 0) {
+      contextParts.push("Actresses: " + selectedMovie.actresses.join(", "));
+    }
+    if (selectedMovie.keywords.length > 0) {
+      contextParts.push("Keywords: " + selectedMovie.keywords.join(", "));
+    }
+    if (selectedMovie.videoId) {
+      contextParts.push("ID: " + selectedMovie.videoId);
+    }
+    const context = contextParts.join("; ");
+    if (!base.trim()) {
+      return `Transcribe this video. Context: ${context}.`;
+    }
+    return `Context: ${context}. Please consider this while: ${base}`;
+  }
 
   useEffect(() => {
     if (!selectedMovieId && movies[0]?.id) {
@@ -48,7 +68,8 @@ export function SearchPage({ movies, setSelectedMovieId, setActivePage, onSubtit
         language,
         model,
         outputMode,
-        customFileName
+        customFileName,
+        prompt
       });
       setStatus(result);
       if (result.ok) {
@@ -76,7 +97,8 @@ export function SearchPage({ movies, setSelectedMovieId, setActivePage, onSubtit
           language,
           model,
           outputMode,
-          customFileName
+          customFileName,
+          prompt
         });
         if (result.ok) {
           successCount += 1;
@@ -146,6 +168,29 @@ export function SearchPage({ movies, setSelectedMovieId, setActivePage, onSubtit
               </span>
             </div>
           )}
+          <div>
+            <label htmlFor="prompt-input"><strong>Transcription prompt (optional)</strong></label>
+            <div className="prompt-input-row">
+              <textarea
+                id="prompt-input"
+                className="search-input"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Enter a prompt to guide transcription (e.g., names, context)"
+                rows={2}
+                aria-label="Transcription prompt"
+              />
+              <button
+                className="secondary-button"
+                disabled={!selectedMovie}
+                onClick={() => setPrompt(enhancePrompt(prompt))}
+                type="button"
+                title="Enhance prompt with movie metadata"
+              >
+                Enhance
+              </button>
+            </div>
+          </div>
           <div>
             <strong>Profile</strong>
             <span>

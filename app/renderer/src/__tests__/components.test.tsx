@@ -88,6 +88,14 @@ const scanOptionsDraft: ScanAutomationOptions = {
   addToGentleModeLibrary: false,
 };
 
+const scanTelemetryProps = {
+  activeFileName: null,
+  scanElapsedLabel: "1m 00s",
+  scanEtaLabel: "ETA --",
+  scanRateLabel: "Rate --",
+  isScanStalled: false,
+};
+
 // ---------------------------------------------------------------------------
 // SamplePosterCard
 // ---------------------------------------------------------------------------
@@ -197,6 +205,7 @@ describe("ScanToast", () => {
         isScanning={true}
         progressPercent={50}
         scanStageLabel="Importing…"
+        {...scanTelemetryProps}
         onCancel={() => {}}
         onDismiss={() => {}}
       />
@@ -211,6 +220,7 @@ describe("ScanToast", () => {
         isScanning={false}
         progressPercent={100}
         scanStageLabel="Done"
+        {...scanTelemetryProps}
         onCancel={() => {}}
         onDismiss={() => {}}
       />
@@ -225,6 +235,7 @@ describe("ScanToast", () => {
         isScanning={true}
         progressPercent={30}
         scanStageLabel="Importing…"
+        {...scanTelemetryProps}
         onCancel={() => {}}
         onDismiss={() => {}}
       />
@@ -239,6 +250,7 @@ describe("ScanToast", () => {
         isScanning={false}
         progressPercent={100}
         scanStageLabel="Done"
+        {...scanTelemetryProps}
         onCancel={() => {}}
         onDismiss={() => {}}
       />
@@ -253,6 +265,7 @@ describe("ScanToast", () => {
         isScanning={true}
         progressPercent={17}
         scanStageLabel="Stage"
+        {...scanTelemetryProps}
         onCancel={() => {}}
         onDismiss={() => {}}
       />
@@ -267,6 +280,7 @@ describe("ScanToast", () => {
         isScanning={true}
         progressPercent={50}
         scanStageLabel="Fetching posters"
+        {...scanTelemetryProps}
         onCancel={() => {}}
         onDismiss={() => {}}
       />
@@ -281,6 +295,7 @@ describe("ScanToast", () => {
         isScanning={true}
         progressPercent={50}
         scanStageLabel="Stage"
+        {...scanTelemetryProps}
         onCancel={() => {}}
         onDismiss={() => {}}
       />
@@ -295,6 +310,7 @@ describe("ScanToast", () => {
         isScanning={false}
         progressPercent={100}
         scanStageLabel="Stage"
+        {...scanTelemetryProps}
         onCancel={() => {}}
         onDismiss={() => {}}
       />
@@ -318,6 +334,7 @@ describe("AppTopBar", () => {
         gentleUnlocked={false}
         scanProgress={null}
         scanStageLabel="Idle"
+        {...scanTelemetryProps}
         lastScanSummaryInvalidFiles={[]}
         getRejectedStatusLabel={() => "Invalid"}
       />
@@ -337,6 +354,7 @@ describe("AppTopBar", () => {
         gentleUnlocked={true}
         scanProgress={null}
         scanStageLabel="Idle"
+        {...scanTelemetryProps}
         lastScanSummaryInvalidFiles={[]}
         getRejectedStatusLabel={() => "Invalid"}
       />
