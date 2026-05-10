@@ -398,7 +398,7 @@ function extractSubtitleLanguageFromName(filePath: string): string {
   const stem = path.basename(filePath, path.extname(filePath));
   const segments = stem.split(".");
   const candidate = segments[segments.length - 1]?.trim();
-  if (candidate && candidate.length >= 2 && candidate.length <= 5) {
+  if (candidate && /^[a-z]{2,3}(?:-[a-z]{2})?$/i.test(candidate)) {
     return candidate.toUpperCase();
   }
 
