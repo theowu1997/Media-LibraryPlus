@@ -1,21 +1,10 @@
-# TODO: Fix Workspace Diagnostics (Inline Styles & Accessibility)
+# TODO
 
-✅ **All fixes complete**
-
-**Changes:**
-- AppSidebar.tsx: Fixed TS style error, dynamic width preserved via CSS var
-- PlayerPage.tsx: 
-  - Extracted inline styles to PlayerPage.module.css 
-  - Added aria-label/title to seekbar, volume, sub lang select
-  - Wrapped config inputs in proper `<label>` elements with `id`/`htmlFor` associations
-  - Added `aria-label="Volume level"` and `title="Adjust volume"`
-
-Status: ✅ Complete - Run `npm run dev` to verify no remaining inline style warnings or form accessibility errors in Edge dev tools.
-
-## Verification Steps (Done)
-- [x] Inline styles eliminated 
-- [x] All form controls labeled (seekbar, volume, config ranges/checkboxes/color/sub select)
-- [x] Layout & functionality preserved
-
-**Workspace diagnostics should now be clean!** 🎉
+## Claude OAuth dev helper
+- [x] Add one-time dev helper script to open Claude OAuth URL and capture `?code=`
+  - [x] Create `scripts/claude-oauth-dev.cjs`
+  - [x] Create `scripts/claude-oauth-dev.bat`
+- [x] Document how to use it
+  - [x] Add `README_CLAUDE_OAUTH_DEV.md`
+- [ ] (Optional) Add an endpoint/token exchange helper (requires client secret/back-end)
 
