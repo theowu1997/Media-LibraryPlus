@@ -1,11 +1,7 @@
 ---
 description: "Use when editing Electron main process code, preload bridge code, services, database logic, file operations, scan workflows, or shared IPC contracts. Covers IPC boundaries, Windows-specific behavior, and native/runtime constraints."
 name: "Main Process Guidelines"
-applyTo:
-  - "app/main/**"
-  - "app/services/**"
-  - "app/database/**"
-  - "app/shared/contracts.ts"
+applyTo: "{app/main/**,app/services/**,app/database/**,app/shared/contracts.ts}"
 ---
 
 # Main Process Guidelines

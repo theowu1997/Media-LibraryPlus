@@ -1,9 +1,7 @@
 ---
 description: "Use when writing or updating Vitest, integration tests, or Playwright coverage for MLA+. Covers where tests live, which commands to run, and how to choose the right level of test."
 name: "Testing Guidelines"
-applyTo:
-  - "app/renderer/src/__tests__/**"
-  - "tests/**"
+applyTo: "{app/renderer/src/__tests__/**,tests/**}"
 ---
 
 # Testing Guidelines
