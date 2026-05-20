@@ -7,6 +7,9 @@
         "build": "tsc -b && vite build",
         "start": "npm run rebuild:electron && electron .",
         "dev": "node scripts/dev.cjs",
+        "tauri:check": "node scripts/check-tauri-prereqs.cjs",
+        "tauri:dev": "tauri dev",
+        "tauri:build": "tauri build",
         "rebuild:node": "npm rebuild better-sqlite3",
         "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
         "test": "npm run rebuild:node && vitest run",
@@ -15,6 +18,7 @@
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.0.0",
+        "@tauri-apps/api": "^2.0.0",
         "better-sqlite3": "^12.8.0",
         "express": "^4.18.2",
         "ffmpeg-static": "^5.3.0",
@@ -25,6 +29,8 @@
     },
     "devDependencies": {
         "@playwright/test": "^1.59.1",
+        "@postman/postman-mcp-server": "^2.8.7",
+        "@tauri-apps/cli": "^2.0.0",
         "@testing-library/jest-dom": "^6.9.1",
         "@testing-library/react": "^16.3.0",
         "@types/better-sqlite3": "^7.6.13",
@@ -39,9 +45,9 @@
         "happy-dom": "^18.0.1",
         "node-abi": "^4.28.0",
         "playwright": "^1.59.1",
-        "vitest": "^3.2.4",
         "typescript": "^5.5.0",
-        "vite": "^8.0.4"
+        "vite": "^8.0.4",
+        "vitest": "^3.2.4"
     },
     "type": "commonjs",
     "build": {

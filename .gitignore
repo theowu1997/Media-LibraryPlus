@@ -50,6 +50,9 @@ build/Release
 node_modules/
 jspm_packages/
 
+# Unrelated repo accidentally copied into workspace
+agent-cli/
+
 # TypeScript v1 declaration files
 typings/
 
@@ -97,6 +100,7 @@ typings/
 dist
 out
 *.tsbuildinfo
+src-tauri/target/
 
 # Azure Functions artifacts
 bin
@@ -108,3 +112,6 @@ local.settings.json
 __blobstorage__
 __queuestorage__
 __azurite_db*__.json
+
+# gstack (global install)
+.amazonq/rules/gstack.md

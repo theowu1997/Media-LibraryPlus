@@ -2,10 +2,19 @@ import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: "./",
   root: path.resolve(__dirname, "app/renderer"),
   plugins: [react()],
+  resolve: {
+    dedupe: ["react", "react-dom"]
+  },
+  optimizeDeps: {
+    dedupe: ["react", "react-dom"]
+  },
+  define: {
+    "process.env.NODE_ENV": JSON.stringify(mode === "production" ? "production" : "development")
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,
@@ -19,7 +28,13 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/renderer"),
     emptyOutDir: false,
-    cssMinify: false
+    cssMinify: false,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "app/renderer/index.html"),
+        player: path.resolve(__dirname, "app/renderer/player.html")
+      }
+    }
   },
   test: {
     globals: true,
@@ -27,4 +42,4 @@ export default defineConfig({
     setupFiles: ["src/__tests__/setup.ts"],
     include: ["src/__tests__/**/*.{test,spec}.{ts,tsx}"]
   }
-});
+}));
