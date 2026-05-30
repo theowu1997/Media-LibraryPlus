@@ -1,5 +1,11 @@
 import crypto from "node:crypto";
-import Database from "better-sqlite3";
+let Database: any;
+try {
+  Database = require("better-sqlite3");
+} catch (error) {
+  console.warn("better-sqlite3 not available:", error instanceof Error ? error.message : String(error));
+}
+import type { Database as DatabaseType } from "better-sqlite3";
 import type {
   AppShellState,
   MetadataSettings,
@@ -79,9 +85,12 @@ const DEFAULT_GENTLE_SHORTCUT = "Ctrl+Alt+D";
 const STARTER_PIN = "2468";
 
 export class DatabaseClient {
-  private db: Database.Database;
+  private db: DatabaseType;
 
   constructor(dbPath: string) {
+    if (!Database) {
+      throw new Error("better-sqlite3 module is not available. This usually means the native module failed to compile. Please check your build logs.");
+    }
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("synchronous = NORMAL");    // safe with WAL, much faster than FULL
