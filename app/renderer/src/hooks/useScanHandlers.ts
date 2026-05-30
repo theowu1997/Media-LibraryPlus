@@ -16,6 +16,7 @@ interface UseScanHandlersProps {
   setScanOptionsDraft: Dispatch<SetStateAction<ScanAutomationOptions>>;
   deferredSearch: string;
   refreshMovies: (query?: string) => Promise<void>;
+  refreshAllMovies: () => Promise<void>;
   initFromAppState: (state: AppShellState) => void;
   setAppState: Dispatch<SetStateAction<AppShellState | null>>;
   setStatusMessage: (msg: string) => void;
@@ -34,6 +35,7 @@ export function useScanHandlers({
   setScanOptionsDraft,
   deferredSearch,
   refreshMovies,
+  refreshAllMovies,
   initFromAppState,
   setAppState,
   setStatusMessage,
@@ -93,6 +95,7 @@ export function useScanHandlers({
       setAppState(nextState);
       initFromAppState(nextState);
       await refreshMovies(deferredSearch);
+      await refreshAllMovies();
       const blockedNote = autoResolveBlocked > 0
         ? ` · ${autoResolveBlocked} gentle-library duplicate(s) kept on disk (unlock to delete).`
         : "";
@@ -150,6 +153,7 @@ export function useScanHandlers({
       setAppState(nextState);
       initFromAppState(nextState);
       await refreshMovies(deferredSearch);
+      await refreshAllMovies();
       const blockedNote = autoResolveBlocked > 0
         ? ` · ${autoResolveBlocked} gentle-library duplicate(s) kept on disk (unlock to delete).`
         : "";

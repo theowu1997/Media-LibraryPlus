@@ -1,18 +1,14 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { AppShellState, LibraryMode, MovieRecord } from "../../../shared/contracts";
+import type { LibraryMode, MovieRecord } from "../../../shared/contracts";
 
 interface UseLibraryActionsProps {
   desktopApi: typeof window.desktopApi;
   movies: MovieRecord[];
   selectedIds: string[];
   setSelectedIds: Dispatch<SetStateAction<string[]>>;
-  pinInput: string;
-  setShowPinPrompt: Dispatch<SetStateAction<boolean>>;
-  setPinInput: Dispatch<SetStateAction<string>>;
   deferredSearch: string;
   refreshMovies: (query?: string) => Promise<void>;
-  initFromAppState: (state: AppShellState) => void;
-  setAppState: Dispatch<SetStateAction<AppShellState | null>>;
+  refreshAllMovies: () => Promise<void>;
   setStatusMessage: (msg: string) => void;
 }
 
@@ -21,13 +17,9 @@ export function useLibraryActions({
   movies,
   selectedIds,
   setSelectedIds,
-  pinInput,
-  setShowPinPrompt,
-  setPinInput,
   deferredSearch,
   refreshMovies,
-  initFromAppState,
-  setAppState,
+  refreshAllMovies,
   setStatusMessage,
 }: UseLibraryActionsProps) {
   async function handleMoveOne(movieId: string, mode: LibraryMode): Promise<void> {
@@ -38,6 +30,7 @@ export function useLibraryActions({
     setStatusMessage(`Moving title into ${mode} library...`);
     await desktopApi.moveMovie(movieId, mode);
     await refreshMovies(deferredSearch);
+    await refreshAllMovies();
     setStatusMessage(`Movie moved into ${mode} library.`);
   }
 
@@ -55,22 +48,8 @@ export function useLibraryActions({
     await desktopApi.moveMovies(selectedIds, mode);
     setSelectedIds([]);
     await refreshMovies(deferredSearch);
+    await refreshAllMovies();
     setStatusMessage(`Batch move complete for ${moveCount} titles.`);
-  }
-
-  async function handleUnlock(): Promise<void> {
-    if (!desktopApi) {
-      setStatusMessage("Desktop bridge unavailable. Restart MLA+ and try again.");
-      return;
-    }
-    const result = await desktopApi.unlockGentle(pinInput);
-    setStatusMessage(result.message);
-    if (!result.ok) return;
-    const nextState = await desktopApi.getAppState();
-    setAppState(nextState);
-    initFromAppState(nextState);
-    setShowPinPrompt(false);
-    setPinInput("");
   }
 
   function selectMissingPosterTitles(): void {
@@ -92,7 +71,6 @@ export function useLibraryActions({
   return {
     handleMoveOne,
     handleBatchMove,
-    handleUnlock,
     selectMissingPosterTitles,
     handlePickLibraryFolder,
   };

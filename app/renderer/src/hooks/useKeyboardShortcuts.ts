@@ -12,8 +12,12 @@ export function useKeyboardShortcuts({
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
-      // Ctrl+Shift+D → toggle Gentle mode on/off
-      if (e.ctrlKey && e.shiftKey && e.key === "D") {
+      const key = e.key.toLowerCase();
+      const toggleByShift = e.ctrlKey && e.shiftKey && key === "d";
+      const toggleByAlt = e.ctrlKey && e.altKey && key === "d";
+
+      // Ctrl+Shift+D or Ctrl+Alt+D → toggle Gentle mode on/off
+      if (toggleByShift || toggleByAlt) {
         e.preventDefault();
         onToggleGentle();
         return;

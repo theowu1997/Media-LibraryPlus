@@ -645,7 +645,7 @@ export class DatabaseClient {
       folderPath: row.folder_path,
       libraryMode: row.library_mode,
       resolution: row.resolution,
-      posterUrl: row.poster_url,
+      posterUrl: this.normalizePosterUrl(row.poster_url),
       posterSource: row.poster_source,
       actresses: this.safeJsonArray(row.actresses_json),
       keywords: this.safeJsonArray(row.keywords_json),
@@ -661,6 +661,23 @@ export class DatabaseClient {
     } catch {
       return [];
     }
+  }
+
+  private normalizePosterUrl(value: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+
+    if (/^(data:|https?:|file:|blob:)/i.test(value)) {
+      return value;
+    }
+
+    const normalized = value.replace(/\\/g, "/");
+    if (/^[a-z]:\//i.test(normalized) || normalized.startsWith("/")) {
+      return `file:///${normalized.replace(/^\/+/, "")}`;
+    }
+
+    return value;
   }
 
   private migrate(): void {

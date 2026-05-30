@@ -68,6 +68,14 @@ export function deriveRegionLabel(movie: MovieRecord): string {
   return getKeywordValue(movie, "region") ?? "Unknown";
 }
 
+export function deriveAgeLabel(movie: MovieRecord): string {
+  return getKeywordValue(movie, "age") ?? "Unknown";
+}
+
+export function deriveRateLabel(movie: MovieRecord): string {
+  return getKeywordValue(movie, "rate") ?? "Unknown";
+}
+
 export function getProgressPercent(progress: ScanProgress | null): number {
   if (!progress) return 0;
   if (progress.totalFiles === 0) {

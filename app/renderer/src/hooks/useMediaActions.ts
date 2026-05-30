@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import type {
   AppShellState,
-  MovieRecord,
   PlayerSettings,
   SubtitleScanResult,
 } from "../../../shared/contracts";
@@ -13,9 +12,9 @@ interface UseMediaActionsProps {
   deferredSearch: string;
   playerSettings: PlayerSettings;
   refreshMovies: (query?: string) => Promise<void>;
+  refreshAllMovies: () => Promise<void>;
   refreshPostersOnly: () => Promise<void>;
   setActressPhotos: Dispatch<SetStateAction<Record<string, string>>>;
-  setAllMoviesPool: Dispatch<SetStateAction<MovieRecord[]>>;
   setStatusMessage: (msg: string) => void;
   setSubtitleScanRunning: Dispatch<SetStateAction<boolean>>;
   setSubtitleScanResult: Dispatch<SetStateAction<SubtitleScanResult | null>>;
@@ -29,9 +28,9 @@ export function useMediaActions({
   deferredSearch,
   playerSettings,
   refreshMovies,
+  refreshAllMovies,
   refreshPostersOnly,
   setActressPhotos,
-  setAllMoviesPool,
   setStatusMessage,
   setSubtitleScanRunning,
   setSubtitleScanResult,
@@ -111,10 +110,7 @@ export function useMediaActions({
       setSubtitleScanResult(result);
       if (result.matched > 0) {
         await refreshMovies(deferredSearch);
-        try {
-          const allMovies = await desktopApi.listAllMovies();
-          setAllMoviesPool(allMovies);
-        } catch { /* not critical */ }
+        await refreshAllMovies();
       }
     } catch { /* ignore */ }
     setSubtitleScanRunning(false);

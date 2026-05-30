@@ -5,11 +5,9 @@ import {
   useMemo,
   useRef,
   useState,
-  type Dispatch,
-  type SetStateAction,
 } from "react";
-import type { AppPage, LibraryMode, MovieRecord } from "../../../shared/contracts";
-import { deriveRegionLabel, deriveStudioName, deriveTagLabel, inferActressFromPath } from "../utils";
+import type { LibraryMode, MovieRecord } from "../../../shared/contracts";
+import { deriveRegionLabel, deriveStudioName, deriveTagLabel, deriveAgeLabel, deriveRateLabel, inferActressFromPath } from "../utils";
 
 const PAGE_SIZE = 200;
 
@@ -19,7 +17,6 @@ interface UseLibraryOptions {
   gentleUnlocked: boolean | undefined;
   /** Whether a scan is currently active (controls poster warmup effect). */
   isScanning: boolean;
-  setActivePage: Dispatch<SetStateAction<AppPage>>;
   actressRegions?: Record<string, string>;
 }
 
@@ -27,7 +24,6 @@ export function useLibrary({
   desktopApi,
   gentleUnlocked,
   isScanning,
-  setActivePage,
   actressRegions = {},
 }: UseLibraryOptions) {
   const [movies, setMovies] = useState<MovieRecord[]>([]);
@@ -107,9 +103,9 @@ export function useLibrary({
       movieIds: string[];
       inferred: boolean;
       modes: Set<LibraryMode>;
-      studios: Map<string, number>;
+      ages: Map<string, number>;
       tags: Map<string, number>;
-      regions: Map<string, number>;
+      rates: Map<string, number>;
     };
     const data = new Map<string, ActressAggregate>();
     function getDominantLabel(values: Map<string, number>): string {
@@ -139,19 +135,19 @@ export function useLibrary({
           movieIds: [],
           inferred,
           modes: new Set<LibraryMode>(),
-          studios: new Map<string, number>(),
+          ages: new Map<string, number>(),
           tags: new Map<string, number>(),
-          regions: new Map<string, number>(),
+          rates: new Map<string, number>(),
         };
         entry.count += 1;
         entry.movieIds.push(movie.id);
         entry.modes.add(movie.libraryMode);
-        const studio = deriveStudioName(movie);
-        entry.studios.set(studio, (entry.studios.get(studio) ?? 0) + 1);
+        const age = deriveAgeLabel(movie);
+        entry.ages.set(age, (entry.ages.get(age) ?? 0) + 1);
         const tag = deriveTagLabel(movie);
         entry.tags.set(tag, (entry.tags.get(tag) ?? 0) + 1);
-        const region = deriveRegionLabel(movie);
-        entry.regions.set(region, (entry.regions.get(region) ?? 0) + 1);
+        const rate = deriveRateLabel(movie);
+        entry.rates.set(rate, (entry.rates.get(rate) ?? 0) + 1);
         const dedicatedPhoto = actressPhotos[actress] ?? null;
         if (!entry.posterUrl) {
           entry.posterUrl = dedicatedPhoto ?? movie.posterUrl ?? null;
@@ -169,9 +165,9 @@ export function useLibrary({
         movieIds: info.movieIds,
         inferred: info.inferred,
         modes: Array.from(info.modes) as LibraryMode[],
-        region: actressRegions[name] ?? getDominantLabel(info.regions),
-        studio: getDominantLabel(info.studios),
+        age: getDominantLabel(info.ages),
         tag: getDominantLabel(info.tags),
+        rate: getDominantLabel(info.rates),
       }))
       .sort((a, b) => {
         switch (actressSortMode) {
@@ -241,18 +237,20 @@ export function useLibrary({
       if (!selectedMovieIdRef.current && nextMovies.length > 0) {
         setSelectedMovieId(nextMovies[0].id);
       }
-      if (!append && nextMovies.length === 0 && !isScanningRef.current) {
-        const libraryPages = new Set(["library", "search"]);
-        setActivePage((current) =>
-          libraryPages.has(current) ? "home" : current
-        );
-      }
     });
   }
 
   async function loadMoreMovies(): Promise<void> {
     if (!desktopApi) return;
     await refreshMovies(deferredSearchRef.current, true);
+  }
+
+  async function refreshAllMovies(): Promise<void> {
+    if (!desktopApi) return;
+    const allMovies = await desktopApi.listAllMovies();
+    startTransition(() => {
+      setAllMoviesPool(allMovies);
+    });
   }
 
   async function refreshPostersOnly(): Promise<void> {
@@ -323,6 +321,7 @@ export function useLibrary({
     gridColumnsRef,
     posterWarmupRef,
     refreshMovies,
+    refreshAllMovies,
     loadMoreMovies,
     refreshPostersOnly,
   };

@@ -17,7 +17,6 @@ import { HomePage } from "./components/HomePage";
 import { LibraryPage } from "./components/LibraryPage";
 import { SearchPage } from "./components/SearchPage";
 import { DuplicateResolutionModal } from "./components/DuplicateResolutionModal";
-import { PinPromptDialog } from "./components/PinPromptDialog";
 import { PlayerPage } from "./components/PlayerPage";
 import { ScanOptionsDialog } from "./components/ScanOptionsDialog";
 import { ScanToast } from "./components/ScanToast";
@@ -58,10 +57,8 @@ export function App() {
   const [appState, setAppState] = useState<AppShellState | null>(null);
   const [activePage, setActivePage] = useState<AppPage>("home");
   const [statusMessage, setStatusMessage] = useState("Preparing local library...");
-  const [showPinPrompt, setShowPinPrompt] = useState(false);
   const [showScanOptionsPrompt, setShowScanOptionsPrompt] = useState(false);
   const [pendingScanMode, setPendingScanMode] = useState<LibraryMode>("normal");
-  const [pinInput, setPinInput] = useState("");
   const [contextMenu, setContextMenu] = useState<{
     movie: MovieRecord;
     x: number;
@@ -90,7 +87,7 @@ export function App() {
   } = settings;
 
   // Stub ref so useScanProgress can call refreshMovies before useLibrary is wired
-  const refreshMoviesRef = useRef<() => void>(() => {});
+  const refreshMoviesRef = useRef<() => void>(() => { });
 
   const {
     scanProgress, setScanProgress,
@@ -120,12 +117,11 @@ export function App() {
     gridColumns, changeGridColumns,
     sortedMovies, actressDirectory, deferredSearch,
     moviesRef,
-    refreshMovies, loadMoreMovies, refreshPostersOnly,
+    refreshMovies, refreshAllMovies, loadMoreMovies, refreshPostersOnly,
   } = useLibrary({
     desktopApi,
     gentleUnlocked: appState?.gentleUnlocked,
     isScanning,
-    setActivePage,
   });
 
   // Wire scan refresh to the live refreshMovies from useLibrary
@@ -203,6 +199,7 @@ export function App() {
     setScanOptionsDraft,
     deferredSearch,
     refreshMovies,
+    refreshAllMovies,
     initFromAppState,
     setAppState,
     setStatusMessage,
@@ -216,7 +213,6 @@ export function App() {
   const {
     handleMoveOne,
     handleBatchMove,
-    handleUnlock,
     selectMissingPosterTitles,
     handlePickLibraryFolder,
   } = useLibraryActions({
@@ -224,13 +220,9 @@ export function App() {
     movies,
     selectedIds,
     setSelectedIds,
-    pinInput,
-    setShowPinPrompt,
-    setPinInput,
     deferredSearch,
     refreshMovies,
-    initFromAppState,
-    setAppState,
+    refreshAllMovies,
     setStatusMessage,
   });
 
@@ -248,9 +240,9 @@ export function App() {
     deferredSearch,
     playerSettings,
     refreshMovies,
+    refreshAllMovies,
     refreshPostersOnly,
     setActressPhotos,
-    setAllMoviesPool,
     setStatusMessage,
     setSubtitleScanRunning,
     setSubtitleScanResult,
@@ -350,7 +342,6 @@ export function App() {
           if (page !== "actresses") setSelectedActress(null);
         }}
         movies={movies}
-        onShowPinPrompt={() => setShowPinPrompt(true)}
         statusMessage={statusMessage}
       />
 
@@ -366,6 +357,7 @@ export function App() {
             const result = await desktopApi.addVideoFiles();
             if (result.added > 0) {
               await refreshMovies(deferredSearch);
+              await refreshAllMovies();
               setStatusMessage(`Added ${result.added} video file${result.added !== 1 ? "s" : ""} to library.`);
             } else if (result.skipped > 0) {
               setStatusMessage(`No new files added — ${result.skipped} file${result.skipped !== 1 ? "s were" : " was"} already in the library.`);
@@ -542,15 +534,6 @@ export function App() {
           }}
           onConfirm={() => void handleConfirmScanOptions()}
           onClose={() => setShowScanOptionsPrompt(false)}
-        />
-      )}
-
-      {showPinPrompt && (
-        <PinPromptDialog
-          pinInput={pinInput}
-          onPinChange={setPinInput}
-          onUnlock={() => void handleUnlock()}
-          onClose={() => setShowPinPrompt(false)}
         />
       )}
 

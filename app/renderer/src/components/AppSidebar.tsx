@@ -15,7 +15,6 @@ interface AppSidebarProps {
   activePage: AppPage;
   onNavigate: (page: AppPage) => void;
   movies: MovieRecord[];
-  onShowPinPrompt: () => void;
   statusMessage: string;
 }
 
@@ -28,7 +27,6 @@ export function AppSidebar({
   activePage,
   onNavigate,
   movies,
-  onShowPinPrompt,
   statusMessage,
 }: AppSidebarProps) {
   return (
@@ -57,15 +55,11 @@ export function AppSidebar({
 
           <nav className="nav">
             {pages.map((page) => {
-              const requiresLibrary = page.id === "library" || page.id === "search";
-              const isDisabled = requiresLibrary && movies.length === 0;
               return (
                 <button
                   key={page.id}
                   className={page.id === activePage ? "nav-link active" : "nav-link"}
-                  onClick={() => { if (!isDisabled) onNavigate(page.id); }}
-                  disabled={isDisabled}
-                  title={isDisabled ? "Scan your library first to access this page" : undefined}
+                  onClick={() => onNavigate(page.id)}
                   type="button"
                 >
                   {page.label}
@@ -75,17 +69,11 @@ export function AppSidebar({
           </nav>
 
           <div className="sidebar-footer">
-            <button
-              className="ghost-button"
-              onClick={onShowPinPrompt}
-              type="button"
-            >
-              Gentle vault
-            </button>
             <div className="hotkey-legend">
               <div className="hotkey-row"><kbd>F5</kbd><span>Scan saved folders</span></div>
               <div className="hotkey-row"><kbd>Ctrl+⇧+N</kbd><span>Scan new Normal</span></div>
               <div className="hotkey-row"><kbd>Ctrl+⇧+G</kbd><span>Scan new Gentle</span></div>
+              <div className="hotkey-row"><kbd>Ctrl+Alt+D</kbd><span>Toggle Gentle mode</span></div>
               <div className="hotkey-row"><kbd>1–6</kbd><span>Switch page</span></div>
               <div className="hotkey-row"><kbd>Esc</kbd><span>Close panel</span></div>
               <div className="hotkey-row hotkey-section"><span>Player (VLC keys)</span></div>

@@ -9,6 +9,9 @@ interface ActressEntry {
   movieIds: string[];
   inferred: boolean;
   modes: LibraryMode[];
+  age: string;
+  tag: string;
+  rate: string;
 }
 
 interface ActressesPageProps {
@@ -51,13 +54,14 @@ export function ActressesPage({
   setContextMenu,
   onRefreshActressPhotos,
 }: ActressesPageProps) {
+  const actressTileMin = Math.max(110, Math.min(260, Math.round(120 + (9 - actressGridCols) * 18)));
   const activeActressEntry = selectedActress
     ? actressDirectory.find((a) => a.name === selectedActress)
     : null;
   const actressMovies = activeActressEntry
     ? (allMoviesPool.length > 0 ? allMoviesPool : movies).filter((m) =>
-        activeActressEntry.movieIds.includes(m.id)
-      )
+      activeActressEntry.movieIds.includes(m.id)
+    )
     : [];
 
   if (selectedActress && activeActressEntry) {
@@ -201,7 +205,7 @@ export function ActressesPage({
         {actressDirectory.length > 0 ? (
           <div
             className="actress-grid"
-            style={{ "--actress-cols": actressGridCols } as React.CSSProperties}
+            style={{ "--actress-tile-min": `${actressTileMin}px` } as React.CSSProperties}
           >
             {actressDirectory.map((actress) => (
               <button
@@ -232,6 +236,11 @@ export function ActressesPage({
                   </div>
                   <div className="actress-overlay">
                     <strong className="actress-name">{actress.name}</strong>
+                    <div className="actress-metadata">
+                      <span className="actress-age">{actress.age}</span>
+                      <span className="actress-tag">{actress.tag}</span>
+                      <span className="actress-rate">{actress.rate}</span>
+                    </div>
                     <span className="actress-count">
                       {actress.count} title{actress.count !== 1 ? "s" : ""}
                       {actress.inferred ? " · 📁" : ""}

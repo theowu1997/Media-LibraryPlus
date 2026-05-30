@@ -1,0 +1,19 @@
+[     818ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5174/@fs/C:/Users/TheoSoungWin10/Desktop/Dev%20Projects/MLA+-blackbox-fix/node_modules/.vite/deps/chunk-HCIN4FJ4.js?v=f5cd8b9e:21606
+[     846ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5174/favicon.ico:0
+[  868409ms] [LOG] [vite] server connection lost. Polling for restart... @ http://localhost:5174/@vite/client:963
+[  870751ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  874121ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  877501ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  880871ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  884225ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  887602ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  890972ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  894341ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  897744ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  901148ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  904581ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  908056ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  911592ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  915197ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  919035ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
+[  923861ms] [ERROR] WebSocket connection to 'ws://localhost:5174/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/@vite/client:1034
