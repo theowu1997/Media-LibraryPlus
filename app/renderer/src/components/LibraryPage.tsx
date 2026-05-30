@@ -25,7 +25,7 @@ interface LibraryPageProps {
   selectedMovieId: string | null;
   selectedIdSet: Set<string>;
   isScanning: boolean;
-  gridRef: React.RefObject<HTMLDivElement | null>;
+  gridRef: React.RefObject<HTMLDivElement>;
   handleGridMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleTileClick: (movie: MovieRecord, event: React.MouseEvent) => void;
   toggleSelected: (movieId: string) => void;
