@@ -847,7 +847,7 @@ function registerHandlers(): void {
   });
 
   ipcMain.handle("actress:refreshPhotos", async () => {
-    const { enrichActressPhotos } = await import("../services/metadataService");
+    const { enrichActressPhotos } = await import("../services/metadataService.js");
     const allMovies = database.listMovies({ includeGentle: true, query: "" });
     const names = new Set<string>();
     for (const movie of allMovies) {

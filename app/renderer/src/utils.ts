@@ -42,6 +42,32 @@ export function inferActressFromPath(sourcePath: string): string | null {
   return parent;
 }
 
+function getKeywordValue(movie: MovieRecord, key: string): string | null {
+  const prefix = `${key.toLowerCase()}:`;
+  const match = movie.keywords.find((keyword) => keyword.toLowerCase().startsWith(prefix));
+  if (!match) return null;
+  return match.slice(prefix.length).trim() || null;
+}
+
+export function deriveStudioName(movie: MovieRecord): string {
+  return (
+    getKeywordValue(movie, "studio") ??
+    (movie.videoId ? movie.videoId.split("-")[0] : null) ??
+    "Unknown"
+  );
+}
+
+export function deriveTagLabel(movie: MovieRecord): string {
+  const explicitTag = getKeywordValue(movie, "tag");
+  if (explicitTag) return explicitTag;
+  const genericKeyword = movie.keywords.find((keyword) => !keyword.includes(":"));
+  return genericKeyword ?? "General";
+}
+
+export function deriveRegionLabel(movie: MovieRecord): string {
+  return getKeywordValue(movie, "region") ?? "Unknown";
+}
+
 export function getProgressPercent(progress: ScanProgress | null): number {
   if (!progress) return 0;
   if (progress.totalFiles === 0) {

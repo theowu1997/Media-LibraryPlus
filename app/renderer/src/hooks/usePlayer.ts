@@ -72,6 +72,7 @@ export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstall
   const [playerMuted, setPlayerMuted] = useState(false);
   const [playerCurrentTime, setPlayerCurrentTime] = useState(0);
   const [playerDuration, setPlayerDuration] = useState(0);
+  const [playerPlaybackError, setPlayerPlaybackError] = useState<string | null>(null);
   const [playerSubtitles, setPlayerSubtitles] = useState<OnlineSubtitleResult[]>([]);
   const [playerSubTrackUrl, setPlayerSubTrackUrl] = useState<string | null>(null);
   const [playerSubTrackLang, setPlayerSubTrackLang] = useState<string>("und");
@@ -169,23 +170,15 @@ export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstall
   }
 
   async function persistPlaybackCheckpoint(movieId: string, positionSeconds: number): Promise<void> {
-    if (!desktopApi) return;
-
     if (!playerSettingsRef.current.rememberPosition || positionSeconds <= 5) {
       positionMemoryRef.current.delete(movieId);
       pendingRestorePositionRef.current = null;
       lastCheckpointSaveRef.current = { movieId, positionSeconds: 0 };
-      try {
-        await desktopApi.playerClearPlaybackCheckpoint(movieId);
-      } catch { /* ignore */ }
       return;
     }
 
     positionMemoryRef.current.set(movieId, positionSeconds);
     lastCheckpointSaveRef.current = { movieId, positionSeconds };
-    try {
-      await desktopApi.playerSavePlaybackCheckpoint(movieId, positionSeconds);
-    } catch { /* ignore */ }
   }
 
   async function handlePlaybackTimeUpdate(positionSeconds: number): Promise<void> {
@@ -205,7 +198,7 @@ export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstall
 
   async function handlePlaybackEnded(): Promise<void> {
     const movieId = playerMovieIdRef.current;
-    if (!movieId || !desktopApi) {
+    if (!movieId) {
       return;
     }
 
@@ -213,9 +206,6 @@ export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstall
     pendingRestorePositionRef.current = null;
     lastCheckpointSaveRef.current = { movieId, positionSeconds: 0 };
     skipNextCheckpointSaveForMovieIdRef.current = movieId;
-    try {
-      await desktopApi.playerClearPlaybackCheckpoint(movieId);
-    } catch { /* ignore */ }
   }
 
   async function loadMovieIntoPlayer(movie: MovieRecord): Promise<void> {
@@ -244,15 +234,6 @@ export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstall
     const inMemoryPosition = positionMemoryRef.current.get(movie.id);
     if (playerSettingsRef.current.rememberPosition && typeof inMemoryPosition === "number" && inMemoryPosition > 5) {
       pendingRestorePositionRef.current = inMemoryPosition;
-    } else if (playerSettingsRef.current.rememberPosition) {
-      try {
-        const checkpoint = await desktopApi.playerGetPlaybackCheckpoint(movie.id);
-        pendingRestorePositionRef.current = checkpoint && checkpoint.positionSeconds > 5
-          ? checkpoint.positionSeconds
-          : null;
-      } catch {
-        pendingRestorePositionRef.current = null;
-      }
     } else {
       pendingRestorePositionRef.current = null;
     }
@@ -281,11 +262,8 @@ export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstall
           allMoviesPoolRef.current.find((movie) => movie.id === playerMovieIdRef.current) ??
           moviesRef.current.find((movie) => movie.id === playerMovieIdRef.current) ??
           null;
-        const installedPath = currentMovie
-          ? await desktopApi.playerInstallSubtitle(currentMovie.id, sub.languageCode || "und", content)
-          : null;
         applySubtitle(content, sub.languageCode || "und");
-        if (installedPath && currentMovie) {
+        if (currentMovie) {
           await onSubtitleInstalled?.();
         }
         setPlayerShowSubPanel(false);
@@ -366,6 +344,23 @@ export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstall
     }
   }
 
+  async function convertMovieToMp4(movie: MovieRecord): Promise<boolean> {
+    if (!desktopApi) return false;
+    try {
+      setPlayerPlaybackError(null);
+      const result = await desktopApi.playerConvertToMp4(movie.sourcePath);
+      if (result) {
+        setPlayerFileUrl(result);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "MP4 conversion failed.";
+      setPlayerPlaybackError(message);
+      return false;
+    }
+  }
+
   return {
     // Refs
     videoRef,
@@ -382,6 +377,7 @@ export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstall
     playerMuted, setPlayerMuted,
     playerCurrentTime, setPlayerCurrentTime,
     playerDuration, setPlayerDuration,
+    playerPlaybackError, setPlayerPlaybackError,
     playerSubtitles, setPlayerSubtitles,
     playerSubTrackUrl, setPlayerSubTrackUrl,
     playerSubTrackLang, setPlayerSubTrackLang,
@@ -406,5 +402,6 @@ export function usePlayer({ desktopApi, movies, allMoviesPool, onSubtitleInstall
     handleDownloadSubtitle,
     handleSearchSubtitles,
     navigatePlaylist,
+    convertMovieToMp4,
   };
 }
