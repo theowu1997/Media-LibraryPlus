@@ -296,7 +296,7 @@ async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenera
           ? "zh"
           : options.language === "translate-km"
             ? "km"
-          : "und",
+            : "und",
     extension: ".srt",
     subtitleCount: Math.max(movie.subtitles.length + 1, 1),
     resolveLongPath: true,
@@ -307,7 +307,7 @@ async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenera
       ? path.join(movie.folderPath, "output.srt")
       : options.outputMode === "custom-name"
         ? path.join(movie.folderPath, `${sanitizeSubtitleFileName(options.customFileName ?? "")}.srt`)
-      : targetPath;
+        : targetPath;
 
   const args = [scriptPath, "--input", movie.sourcePath, "--output", finalTargetPath, "--model", options.model];
   if (options.language === "translate-en") {
@@ -372,7 +372,7 @@ async function runSubtitleGeneration(movie: MovieRecord, options: SubtitleGenera
               ? "zh"
               : options.language === "translate-km"
                 ? "km"
-              : detectedLanguage);
+                : detectedLanguage);
         database.upsertSubtitle(movie.id, payload.output, outputLanguage);
         resolve({
           ok: true,
@@ -567,9 +567,9 @@ async function fetchSubtitleCatResults(query: string): Promise<OnlineSubtitleRes
 }
 
 function registerHandlers(): void {
-    ipcMain.handle("settings:getGentleShortcut", async () => {
-      return database.getGentleShortcut();
-    });
+  ipcMain.handle("settings:getGentleShortcut", async () => {
+    return database.getGentleShortcut();
+  });
 
   ipcMain.handle("settings:setGentleShortcut", async (_event, shortcut: string) => {
     database.setGentleShortcut(shortcut);

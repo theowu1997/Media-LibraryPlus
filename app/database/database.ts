@@ -416,9 +416,9 @@ export class DatabaseClient {
             : DEFAULT_METADATA_SETTINGS.tmdbNonCommercialUse,
         sourceProfile:
           parsed.sourceProfile === "adult-first" ||
-          parsed.sourceProfile === "mainstream-first" ||
-          parsed.sourceProfile === "local-only" ||
-          parsed.sourceProfile === "auto"
+            parsed.sourceProfile === "mainstream-first" ||
+            parsed.sourceProfile === "local-only" ||
+            parsed.sourceProfile === "auto"
             ? parsed.sourceProfile
             : DEFAULT_METADATA_SETTINGS.sourceProfile
       };
@@ -490,11 +490,11 @@ export class DatabaseClient {
         rememberPosition: typeof parsed.rememberPosition === "boolean" ? parsed.rememberPosition : d.rememberPosition,
         videoFilterPreset:
           parsed.videoFilterPreset === "vivid" ||
-          parsed.videoFilterPreset === "warm" ||
-          parsed.videoFilterPreset === "cool" ||
-          parsed.videoFilterPreset === "mono" ||
-          parsed.videoFilterPreset === "sepia" ||
-          parsed.videoFilterPreset === "none"
+            parsed.videoFilterPreset === "warm" ||
+            parsed.videoFilterPreset === "cool" ||
+            parsed.videoFilterPreset === "mono" ||
+            parsed.videoFilterPreset === "sepia" ||
+            parsed.videoFilterPreset === "none"
             ? parsed.videoFilterPreset
             : d.videoFilterPreset,
         videoFilterStrength:

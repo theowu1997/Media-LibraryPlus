@@ -128,9 +128,9 @@ export function useLibrary({
         movie.actresses.length > 0
           ? movie.actresses
           : (() => {
-              const inferred = inferActressFromPath(movie.sourcePath);
-              return inferred ? [inferred] : [];
-            })();
+            const inferred = inferActressFromPath(movie.sourcePath);
+            return inferred ? [inferred] : [];
+          })();
       const inferred = movie.actresses.length === 0;
       for (const actress of actresses) {
         const entry: ActressAggregate = data.get(actress) ?? {

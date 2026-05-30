@@ -76,10 +76,10 @@ export async function moveMovieToMode(
       code === "EPERM" || code === "EACCES"
         ? " — file may be read-only or open in another app"
         : code === "ENOSPC"
-        ? " — destination disk is full"
-        : code
-        ? ` [${code}]`
-        : "";
+          ? " — destination disk is full"
+          : code
+            ? ` [${code}]`
+            : "";
     throw new Error(`Cannot move "${path.basename(movie.sourcePath)}"${hint}`);
   }
 
