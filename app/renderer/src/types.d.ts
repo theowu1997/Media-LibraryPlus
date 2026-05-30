@@ -17,6 +17,7 @@ declare global {
   interface Window {
     desktopApi: {
       getAppState: () => Promise<AppShellState>;
+      setThemeMode: (themeMode: "dark" | "light") => Promise<AppShellState>;
       saveMetadataSettings: (settings: MetadataSettings) => Promise<AppShellState>;
       saveOrganizationSettings: (settings: OrganizationSettings) => Promise<AppShellState>;
       pickLibraryFolder: () => Promise<string | null>;
@@ -44,7 +45,7 @@ declare global {
       playerGetSettings: () => Promise<PlayerSettings>;
       playerSaveSettings: (settings: PlayerSettings) => Promise<PlayerSettings>;
       playerGetFileUrl: (filePath: string, folderPath?: string | null) => Promise<string>;
-      playerConvertToMp4: (filePath: string) => Promise<{ ok: boolean; url?: string; error?: string }>;
+      playerConvertToMp4: (filePath: string) => Promise<string | null>;
       onScanProgress: (handler: (progress: ScanProgress) => void) => () => void;
       resolveDuplicate: (keepPath: string, deletePaths: string[], gentleUnlocked?: boolean) => Promise<{ deleted: number; blocked: number }>;
       addSubtitleDir: () => Promise<AppShellState>;

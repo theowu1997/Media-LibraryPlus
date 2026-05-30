@@ -1,12 +1,16 @@
 import crypto from "node:crypto";
 import Database from "better-sqlite3";
 import type {
+  AppShellState,
   MetadataSettings,
   LibraryMode,
   LibraryRoots,
   MovieRecord,
   OrganizationSettings,
+  PlaybackCheckpoint,
   PlayerSettings,
+  ScanHistoryEntry,
+  ScanSummary,
   SubtitleRecord
 } from "../shared/contracts";
 import { DEFAULT_ORGANIZATION_SETTINGS } from "../shared/organizationTemplates";
@@ -64,8 +68,13 @@ const DEFAULT_METADATA_SETTINGS: MetadataSettings = {
   tmdbReadAccessToken: "",
   language: "en-US",
   region: "US",
-  autoFetchWebPosters: true
+  autoFetchWebPosters: true,
+  tmdbNonCommercialUse: false,
+  sourceProfile: "auto"
 };
+
+const DEFAULT_THEME_MODE: AppShellState["themeMode"] = "dark";
+const DEFAULT_GENTLE_SHORTCUT = "Ctrl+Alt+D";
 
 const STARTER_PIN = "2468";
 
@@ -400,7 +409,18 @@ export class DatabaseClient {
         autoFetchWebPosters:
           typeof parsed.autoFetchWebPosters === "boolean"
             ? parsed.autoFetchWebPosters
-            : DEFAULT_METADATA_SETTINGS.autoFetchWebPosters
+            : DEFAULT_METADATA_SETTINGS.autoFetchWebPosters,
+        tmdbNonCommercialUse:
+          typeof parsed.tmdbNonCommercialUse === "boolean"
+            ? parsed.tmdbNonCommercialUse
+            : DEFAULT_METADATA_SETTINGS.tmdbNonCommercialUse,
+        sourceProfile:
+          parsed.sourceProfile === "adult-first" ||
+          parsed.sourceProfile === "mainstream-first" ||
+          parsed.sourceProfile === "local-only" ||
+          parsed.sourceProfile === "auto"
+            ? parsed.sourceProfile
+            : DEFAULT_METADATA_SETTINGS.sourceProfile
       };
     } catch {
       return { ...DEFAULT_METADATA_SETTINGS };
@@ -452,7 +472,8 @@ export class DatabaseClient {
     subtitleColor: "#ffffff",
     autoPlayNext: false,
     rememberPosition: true,
-    seekDuration: 10
+    videoFilterPreset: "none",
+    videoFilterStrength: 50
   };
 
   getPlayerSettings(): PlayerSettings {
@@ -467,7 +488,17 @@ export class DatabaseClient {
         subtitleColor: typeof parsed.subtitleColor === "string" ? parsed.subtitleColor : d.subtitleColor,
         autoPlayNext: typeof parsed.autoPlayNext === "boolean" ? parsed.autoPlayNext : d.autoPlayNext,
         rememberPosition: typeof parsed.rememberPosition === "boolean" ? parsed.rememberPosition : d.rememberPosition,
-        seekDuration: typeof parsed.seekDuration === "number" ? parsed.seekDuration : d.seekDuration
+        videoFilterPreset:
+          parsed.videoFilterPreset === "vivid" ||
+          parsed.videoFilterPreset === "warm" ||
+          parsed.videoFilterPreset === "cool" ||
+          parsed.videoFilterPreset === "mono" ||
+          parsed.videoFilterPreset === "sepia" ||
+          parsed.videoFilterPreset === "none"
+            ? parsed.videoFilterPreset
+            : d.videoFilterPreset,
+        videoFilterStrength:
+          typeof parsed.videoFilterStrength === "number" ? parsed.videoFilterStrength : d.videoFilterStrength
       };
     } catch {
       return { ...DatabaseClient.DEFAULT_PLAYER_SETTINGS };
@@ -476,6 +507,105 @@ export class DatabaseClient {
 
   setPlayerSettings(settings: PlayerSettings): void {
     this.setSetting("player_settings", JSON.stringify(settings));
+  }
+
+  getGentleShortcut(): string {
+    const value = this.getSetting("gentle_shortcut");
+    return value?.trim() || DEFAULT_GENTLE_SHORTCUT;
+  }
+
+  setGentleShortcut(shortcut: string): void {
+    const normalized = shortcut.trim() || DEFAULT_GENTLE_SHORTCUT;
+    this.setSetting("gentle_shortcut", normalized);
+  }
+
+  getThemeMode(): AppShellState["themeMode"] {
+    const value = this.getSetting("theme_mode");
+    return value === "light" ? "light" : DEFAULT_THEME_MODE;
+  }
+
+  setThemeMode(themeMode: AppShellState["themeMode"]): void {
+    this.setSetting("theme_mode", themeMode === "light" ? "light" : "dark");
+  }
+
+  getScanHistory(): ScanHistoryEntry[] {
+    const raw = this.getSetting("scan_history");
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? (parsed as ScanHistoryEntry[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  appendScanHistory(summary: ScanSummary): void {
+    const history = this.getScanHistory();
+    history.unshift({ createdAt: new Date().toISOString(), summary });
+    this.setSetting("scan_history", JSON.stringify(history.slice(0, 50)));
+  }
+
+  getActressRegions(): Record<string, string> {
+    const raw = this.getSetting("actress_regions");
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  getActressRegion(name: string): string | null {
+    return this.getActressRegions()[name] ?? null;
+  }
+
+  setActressRegion(name: string, region: string): void {
+    const next = this.getActressRegions();
+    if (region.trim()) next[name] = region.trim();
+    else delete next[name];
+    this.setSetting("actress_regions", JSON.stringify(next));
+  }
+
+  getActressPhotos(_name: string): string[] {
+    return [];
+  }
+
+  addActressPhoto(name: string, photoUrl: string): void {
+    this.setActressPhoto(name, photoUrl);
+  }
+
+  removeActressPhoto(name: string, _photoUrl?: string): void {
+    this.db.prepare("DELETE FROM actress_photos WHERE name = ?").run(name);
+  }
+
+  setPrimaryActressPhoto(name: string, photoUrl: string): void {
+    this.setActressPhoto(name, photoUrl);
+  }
+
+  getPlaybackCheckpoint(movieId: string): PlaybackCheckpoint | null {
+    const raw = this.getSetting(`playback_checkpoint:${movieId}`);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as PlaybackCheckpoint;
+      return parsed?.movieId ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  savePlaybackCheckpoint(movieId: string, positionSeconds: number): PlaybackCheckpoint {
+    const checkpoint: PlaybackCheckpoint = {
+      movieId,
+      positionSeconds,
+      updatedAt: new Date().toISOString(),
+    };
+    this.setSetting(`playback_checkpoint:${movieId}`, JSON.stringify(checkpoint));
+    return checkpoint;
+  }
+
+  clearPlaybackCheckpoint(movieId: string): void {
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`playback_checkpoint:${movieId}`);
   }
 
   createSubtitleId(movieId: string, subtitlePath: string): string {

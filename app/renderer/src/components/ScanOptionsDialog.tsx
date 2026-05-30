@@ -4,9 +4,9 @@ interface ScanOptionsDialogProps {
   pendingScanMode: LibraryMode;
   organizationDraft: OrganizationSettings;
   scanOptionsDraft: ScanAutomationOptions;
-  scanSourceMode: "saved" | "folder";
+  scanSourceMode?: "saved" | "folder";
   onChangeScanOption: <K extends keyof ScanAutomationOptions>(key: K, value: ScanAutomationOptions[K]) => void;
-  onChangeScanSource: (mode: "saved" | "folder") => void;
+  onChangeScanSource?: (mode: "saved" | "folder") => void;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -15,9 +15,9 @@ export function ScanOptionsDialog({
   pendingScanMode,
   organizationDraft,
   scanOptionsDraft,
-  scanSourceMode,
+  scanSourceMode = "folder",
   onChangeScanOption,
-  onChangeScanSource,
+  onChangeScanSource = () => undefined,
   onConfirm,
   onClose,
 }: ScanOptionsDialogProps) {

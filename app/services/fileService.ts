@@ -167,7 +167,7 @@ async function ensureUniquePath(initialPath: string): Promise<string> {
 /** Robust file move for Windows + cross-device scenarios.
  *  Handles: EXDEV (cross-drive), EPERM/EACCES (read-only attr / ACL),
  *  EBUSY (file locked — retries up to 5× with 300 ms back-off). */
-async function moveFile(sourcePath: string, targetPath: string): Promise<void> {
+export async function moveFile(sourcePath: string, targetPath: string): Promise<void> {
   const RETRIES = 5;
   const RETRY_DELAY_MS = 300;
 

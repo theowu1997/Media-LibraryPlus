@@ -240,6 +240,7 @@ function mockScanSummary(overrides: Partial<ScanSummary> = {}): ScanSummary {
     imported: 10,
     skipped: 0,
     errors: [],
+    subtitleSearchLogs: [],
     invalidFiles: [],
     duplicateGroups: [],
     scannedRoots: { normal: ["/lib/normal"], gentle: [] },

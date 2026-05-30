@@ -17,6 +17,8 @@ import type {
 
 const api = {
   getAppState: (): Promise<AppShellState> => ipcRenderer.invoke("app:getState"),
+  setThemeMode: (themeMode: "dark" | "light"): Promise<AppShellState> =>
+    ipcRenderer.invoke("settings:setThemeMode", themeMode),
   saveMetadataSettings: (settings: MetadataSettings): Promise<AppShellState> =>
     ipcRenderer.invoke("settings:saveMetadata", settings),
   saveOrganizationSettings: (settings: OrganizationSettings): Promise<AppShellState> =>

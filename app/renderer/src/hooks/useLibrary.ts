@@ -20,7 +20,7 @@ interface UseLibraryOptions {
   /** Whether a scan is currently active (controls poster warmup effect). */
   isScanning: boolean;
   setActivePage: Dispatch<SetStateAction<AppPage>>;
-  actressRegions: Record<string, string>;
+  actressRegions?: Record<string, string>;
 }
 
 export function useLibrary({
@@ -28,7 +28,7 @@ export function useLibrary({
   gentleUnlocked,
   isScanning,
   setActivePage,
-  actressRegions,
+  actressRegions = {},
 }: UseLibraryOptions) {
   const [movies, setMovies] = useState<MovieRecord[]>([]);
   const [movieTotalCount, setMovieTotalCount] = useState(0);
