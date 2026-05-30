@@ -992,12 +992,14 @@ function registerHandlers(): void {
   });
 }
 
-app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
-app.commandLine.appendSwitch("disable-http-cache");
+if (app) {
+  const userDataOverride = process.env.MLA_USER_DATA_DIR?.trim();
+  if (userDataOverride) {
+    app.setPath("userData", path.resolve(userDataOverride));
+  }
 
-const userDataOverride = process.env.MLA_USER_DATA_DIR?.trim();
-if (userDataOverride) {
-  app.setPath("userData", path.resolve(userDataOverride));
+  app.commandLine?.appendSwitch?.("disable-gpu-shader-disk-cache");
+  app.commandLine?.appendSwitch?.("disable-http-cache");
 }
 
 app.whenReady().then(() => {
