@@ -20,6 +20,7 @@ Use this file as a quick orientation only. Keep behavior-specific details in sco
   - [IPC boundary reminder hook](.github/hooks/ipc-boundary-reminder.json)
   - [IPC boundary guard script](scripts/hooks/ipc-boundary-guard.ps1) (asks on single-boundary edits and when no test-path updates are detected)
   - Intentional exception token: include IPC_GUARD_OK in the prompt/tool context to bypass guard asks for one-off, justified cases
+  - [IPC guard workflow documentation](docs/ipc-guard-workflow.md)
 
 ## Core Rules (Always Apply)
 
