@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, shell, globalShortcut } from "electron";
-import { DatabaseClient } from "../database/database";
 import { moveMovieToMode } from "../services/fileService";
 import { buildTargetNfoPath, buildTargetSubtitlePath } from "../services/libraryLayout";
 import { DEFAULT_SCAN_OPTIONS, scanLibraries, createCancelToken, type CancelToken } from "../services/libraryScanner";
@@ -26,8 +25,9 @@ import type {
   SubtitleGenerationResult
 } from "../shared/contracts";
 
+// Lazy-load DatabaseClient to prevent import blocking
 let mainWindow: BrowserWindow | null = null;
-let database: DatabaseClient;
+let database: any;
 let gentleUnlocked = false;
 let activeScanToken: CancelToken | null = null;
 // Track the currently registered gentle shortcut
@@ -659,8 +659,8 @@ function registerHandlers(): void {
         includeGentle: true,
         query: ""
       })
-      .filter((movie) => !movie.posterUrl)
-      .map((movie) => movie.id);
+      .filter((movie: MovieRecord) => !movie.posterUrl)
+      .map((movie: MovieRecord) => movie.id);
 
     return backfillMoviePosters(movieIds);
   });
@@ -1002,10 +1002,18 @@ if (app) {
   app.commandLine?.appendSwitch?.("disable-http-cache");
 }
 
-app.whenReady().then(() => {
-
-  const databasePath = path.join(app.getPath("userData"), "mla-plus.db");
-  database = new DatabaseClient(databasePath);
+app.whenReady().then(async () => {
+  // Lazy-load DatabaseClient after app is ready
+  try {
+    const { DatabaseClient } = await import("../database/database.js");
+    const databasePath = path.join(app.getPath("userData"), "mla-plus.db");
+    database = new DatabaseClient(databasePath);
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+    dialog.showErrorBox("Database Error", "Failed to initialize database. The application will exit.");
+    app.quit();
+    return;
+  }
   registerHandlers();
   createWindow();
 
